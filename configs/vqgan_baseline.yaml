@@ -1,0 +1,78 @@
+model:
+  base_learning_rate: 8e-7 
+  target: taming.models.vqgan_dino.VQModel2WithEntropyDINOLossMAEinit
+  params:
+    monitor: 'val/rec_loss'
+    grad_acc_steps: 16
+    pretrained_encoder: 'MAE'
+    dino_model_type: 'VIT_DINOv2'
+    encoder_config:
+      target: taming.modules.diffusionmodules.model_vit.EncoderVIT
+      params:
+        image_size: 256
+        patch_size: 16
+        z_channels: 768
+        depth : 12
+        heads : 12
+        mlp_dim : 3072
+        normalize_embedding: True
+    decoder_config:
+      target: taming.modules.diffusionmodules.model.Decoder
+      params:
+        double_z: False
+        z_channels: 768
+        resolution: 256
+        in_channels: 3
+        out_ch: 3
+        ch: 128
+        ch_mult: [ 1,1,2,2,4]  # num_down = len(ch_mult)-1
+        num_res_blocks: 2
+        attn_resolutions: [16]
+        dropout: 0.0
+        normalize_embedding: False
+    quantizer_config:
+      target: taming.modules.vqvae.quantize_with_entropy_loss.VectorQuantizer2WithEntropyLoss
+      params:
+        n_e: 4096
+        e_dim: 16
+        beta: 0.25
+        normalize_embedding: True
+    loss_config:
+      target: taming.modules.losses.vqperceptual_dino.VQLPIPSWithDiscriminatorEntropyDINOLoss
+      params:
+        disc_conditional: False
+        disc_in_channels: 3
+        disc_start: 20000
+        disc_weight: 0.1
+        adaptive_disc_weight: True
+        codebook_weight: 1.0
+        dino_loss_weight: 1.0
+        perceptual_weight: 1.0
+        l1_loss_weight: 1.0
+        l2_loss_weight: 0.0
+        warmup_steps: 5000
+        min_lr_multiplier: 0.1
+        beta_1: 0.5
+        beta_2: 0.9
+    entropy_loss_weight_scheduler_config:
+      target: taming.lr_scheduler.VQEntropyLossScheduler
+      params:
+        decay_steps: 10000
+        weight_max: 0.01
+        weight_min: 0.001
+
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 3
+    num_workers: 16
+    train:
+      target: taming.data.custom.CustomTrain
+      params:
+        training_images_list_file: /work/dlcsmall2/mittal-bdd-data/BDD100K/images/train_daytime_clear.txt
+        size: 256
+    validation:
+      target: taming.data.custom.CustomTest
+      params:
+        test_images_list_file: /work/dlcsmall2/mittal-bdd-data/BDD100K/images/val_daytime_clear.txt
+        size: 256
