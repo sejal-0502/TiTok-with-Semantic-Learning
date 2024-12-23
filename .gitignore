@@ -1,4 +1,5 @@
-vqgan_logs/
+vqgan_logs/*
+visualizations/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

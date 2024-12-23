@@ -27,8 +27,8 @@ from torchvision.models import inception_v3
 
 import matplotlib.pyplot as plt
 from omegaconf import OmegaConf
-from taming.models.vqgan import VQModel, GumbelVQ
-from taming.models.vqgan_with_entropy_loss import VQModel2WithEntropyLoss
+from visual_tokenization.taming.models.vqgan import VQModel, GumbelVQ
+from visual_tokenization.taming.models.vqgan_with_entropy_loss import VQModel2WithEntropyLoss
 
 from pytorch_fid.fid_score import calculate_fid_given_paths
 from compute_FID import calculate_fid, ImageFolderDataset, get_inception_features
@@ -59,10 +59,6 @@ def instantiate_from_config(config):
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 def load_vqgan(config, ckpt_path=None, is_gumbel=False):
-  # if is_gumbel:
-  #   model = GumbelVQ(**config.model.params)
-  # else:
-  #   model = VQModel(**config.model.params)
 
   model = instantiate_from_config(config.model)
 
@@ -80,8 +76,8 @@ def preprocess_vqgan(x):
   return x
 
 def unnormalize_vqgan(x):
-   #convert to numpy
-   x = x.permute(1, 2, 0).cpu().numpy()
+   if isinstance(x, torch.Tensor):
+     x = x.cpu().detach().numpy()
    image = ((x+1)*127.5).astype(np.uint8)
    return image
 
@@ -91,30 +87,19 @@ def reconstruct_with_vqgan(x, model, hist, codebook_size):
     if "vqgan_hierarchical_multires" in str(model.__class__):
       codes = codes[1]; indices = indices[1][-1]
       reconst_sample = model.decode(codes, i=1)
-    elif 'sep' in str(model.__class__):
-      #import pdb; pdb.set_trace()
-      indices = indices[-1]
-      
-      #print(indices[0].shape, indices[1].shape)
-      reconst_sample = model.decode(codes) 
     else:
       indices = indices[-1]
       reconst_sample = model.decode(codes)
-
     if isinstance(reconst_sample, tuple):
         reconst_sample = reconst_sample[0]
     if isinstance(reconst_sample, tuple):
         reconst_sample = reconst_sample[0]
     #print(f"VQGAN --- {model.__class__.__name__}: latent shape: {z.shape[2:]}")
-    
-    #if isinstance(indices, tuple):
-    #    indices_ = indices[0]
-
     if len(indices.shape) > 1:
       indices = indices.view(-1)
     for index in indices:
         if 0 <= index < codebook_size:
-            hist[index] += 1
+            hist[index.int()] += 1
     return reconst_sample, hist, indices, codes
 
 def create_histogram(codebook_size):
@@ -139,7 +124,10 @@ def preprocess(img, target_image_size=256, map_dalle=True):
     return img
 
 def reconstruction_pipeline(model, image, hist, size, codebook_size):
-  x_vqgan = torch.tensor(image).unsqueeze(0).to(DEVICE)
+  if len(image.shape) == 3:
+    x_vqgan = torch.tensor(image).permute(2, 0, 1).unsqueeze(0).to(DEVICE)
+  else:
+    x_vqgan = image.to(DEVICE)
   reconstructed, hist, indices, codes = reconstruct_with_vqgan(x_vqgan, model, hist, codebook_size)
   reconstructed = reconstructed[0].cpu().permute(1, 2, 0)
   reconstructed = ((reconstructed+1)*127.5).clamp_(0, 255).numpy().astype(np.uint8)
@@ -184,7 +172,9 @@ def create_index_visualization(img, indices, codes, patch_size, colors, save_dir
     :param patch_size: The size of the patch.
     :return: The visualization.
     """
-
+    # convert shape from (3, 224, 224) to (224, 224, 3)
+    # img = (img * 255).astype(np.uint8)
+    # img = np.transpose(img, (1, 2, 0))
     original_size = img.shape[:2]
     upscaled_size = (original_size[0] * upscale_factor, original_size[1] * upscale_factor)
     pil_img = Image.fromarray(img).resize(upscaled_size, resample=PIL.Image.NEAREST)
@@ -288,16 +278,6 @@ def compute_rFID_score(model, path_original_images, path_recons_images):
     original_images = ImageFolderDataset(folder_path=path_original_images, transform=transform)
     # get reconstructed images from the VQGAN model
 
-    # print(">> Generating Reconstructed Images...")
-    # for i in range(num_images):
-    #     quant, _, _ = model.encode(original_images[i].unsqueeze(0).cuda())
-    #     reconst_sample = model.decode(quant)
-    #     if isinstance(reconst_sample, tuple):
-    #         reconst_sample = reconst_sample[0]
-    #     if isinstance(reconst_sample, tuple):
-    #         reconst_sample = reconst_sample[0]
-    #     save_image(reconst_sample, os.path.join(path_recons_images, f"reconstructed_image_{i}.jpg"))
-
     reconstructed_images = ImageFolderDataset(folder_path=path_recons_images, transform=transform)
     reconstructed_images.image_filenames = original_images.image_filenames  # let's make sure they match...
     
@@ -358,12 +338,13 @@ def process_images(model, dataset, num_images, codebook_size, exp_dir):
         # input_path = os.path.join(input_folder, image_name)
         
         sample = dataset[image_idx]
-
-        # change dim2 to dim0
-        image = sample
+        #image = sample.unsqueeze(0)
+        #input_path = sample['file_path_']
+        image = sample['image']
 
         # Modify the image
         reconstructed, histo, indices, x_vqgan, codes = reconstruction_pipeline(model, image, hist=histo, size=256, codebook_size=codebook_size)
+        
 
         if args.cluster_indices:
            indices = cluster_the_indices(indices.cpu().numpy(), codes, max_d=1.9)
@@ -402,7 +383,6 @@ def process_images(model, dataset, num_images, codebook_size, exp_dir):
 def main(args):
   config = load_config(args.config_path, display=False) #99.85% zeros 
   model = load_vqgan(config, ckpt_path=args.ckpt_path).to(DEVICE)
-  #codebook_size = config.model.params.get("n_embed", model.codebook_size)
   try:
     codebook_size = config.model.params.quantizer_config.params.get("n_e", args.codebook_size)
   except:
@@ -422,15 +402,14 @@ def main(args):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
-  parser.add_argument("--exp_name", type=str, default='images', help="Experiment name")
+  parser.add_argument("--exp_name", type=str, default=None, help="Experiment name")
   parser.add_argument("--config_path", type=str, default=None, help="Path to the config file")
   parser.add_argument("--ckpt_path", type=str, default=None, help="Path to the checkpoint file")
 
   # (optional) data config
   parser.add_argument("--data_config", type=str, default=None, help="Path to the data config file")
 
-  parser.add_argument("--input_folder", type=str, default="test", help="Path to input data folder")
-  # parser.add_argument("--exp_dir", type=str, default="../vqgan_logs/visualizations/exp23_ep151", help="Path to experiment directory")
+  parser.add_argument("--input_folder", type=str, default="./datasets/BDD100K/bdd100k/images/100k/test/", help="Path to input data folder")
   parser.add_argument("--create_index_visualization", action="store_true", help="Create index visualization")
   parser.add_argument("--cluster_indices", action="store_true", help="Cluster indices")
   parser.add_argument("--save_patches_by_index", action="store_true", help="Save patches by index")

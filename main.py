@@ -305,7 +305,7 @@ if __name__ == "__main__":
             name = ""
         nowname = now+name+opt.postfix+"_"+get_jobid()
         logdir = os.path.join(os.environ.get("VQ_WORK_DIR", "vqgan_logs"), nowname)
-        # logdir = os.path.join("/misc/lmbraid21/mousakha/checkpoints/vqgan/logs", nowname)
+
     print(">>> Logging to {}".format(logdir))
 
     ckptdir = os.path.join(logdir, "checkpoints")

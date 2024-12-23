@@ -20,3 +20,8 @@ n_nodes: specifies number of nodes, default=1
 ```
 python main.py --base ./configs/vqgan_baseline.yaml -t True --n_gpus 1  --resume ./logs/path/to/checkpoint
 ```
+
+### Compute FID score
+```
+python tools/compute_codebook_usage.py --config_path ./vqgan_logs/vqgan_baseline_exp/config.yaml --ckpt_path ./vqgan_logs/vqgan_baseline_exp/checkpoints/last.ckpt --compute_rFID_score
+```

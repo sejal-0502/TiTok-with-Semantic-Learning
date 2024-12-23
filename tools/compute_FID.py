@@ -11,19 +11,15 @@ from scipy.linalg import sqrtm
 from tqdm import tqdm
 
 import torch
-# import torch.nn.functional as F
-# import torchvision.utils as vutils
 from torchvision.utils import save_image
 from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 from torchvision.models import inception_v3
 
 from omegaconf import OmegaConf
+import sys
+sys.path.append(".")
 from main import instantiate_from_config
-
-# class Args(argparse.Namespace):
-#     data_folder="/misc/lmbraid19/mittal/datasets/BDD100K/bdd100k/images/100k/val"
-#     exp_name="2024-01-23T19-54-16_custom_vqgan_LFQ_f16_16384_bdd_daytime_clear"
 
 # Dataset class for loading generated images
 class ImageFolderDataset(Dataset):
@@ -147,7 +143,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("exp_name", type=str, help="Name of the experiment")
     parser.add_argument("epoch", type=int, help="Epoch number")
-    parser.add_argument("--data_folder", type=str, default="/misc/lmbraid19/mittal/datasets/BDD100K/bdd100k/images/100k/val", help="Path to the dataset")
+    parser.add_argument("--data_folder", type=str, default="/datasets/BDD100K/bdd100k/images/100k/val", help="Path to the dataset")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--num_samples", type=int, default=200, help="Number of real/produced samples for evaluation")
 
