@@ -7,7 +7,9 @@ import math
 
 from taming.util import instantiate_from_config
 from taming.modules.diffusionmodules.model import Encoder, Decoder
+from taming.modules.diffusionmodules.model_vit import EncoderVIT 
 from taming.modules.vqvae.quantize import VectorQuantizer2 as VectorQuantizer
+# from taming.modules.vqvae.quantize import VectorQuantizer
 from taming.modules.vqvae.quantize import GumbelQuantize
 from taming.modules.vqvae.quantize import EMAVectorQuantizer
 
@@ -32,13 +34,16 @@ class VQModel(pl.LightningModule):
         self.image_key = image_key
         self.grad_acc_steps = grad_acc_steps
         self.encoder_normalize_embedding = normalize_embedding
-        self.encoder = Encoder(**ddconfig)
+        self.encoder = EncoderVIT(**ddconfig)
         self.decoder = Decoder(**ddconfig)
         self.loss = instantiate_from_config(lossconfig)
         self.quantize = VectorQuantizer(n_embed, embed_dim,  beta=0.25, normalize_embedding=self.normalize_embedding,
                                         remap=remap, sane_index_shape=sane_index_shape)
-        self.quant_conv = torch.nn.Conv2d(ddconfig["z_channels"], embed_dim, 1)
+        # self.quant_conv = torch.nn.Conv2d(ddconfig["z_channels"], embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
+        self.num_latent_tokens = 192
+        self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
+
 
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
@@ -250,7 +255,7 @@ class VQModel2(VQModel):
         self.decoder = instantiate_from_config(decoder_config)
         self.quantize = instantiate_from_config(quantizer_config)
         self.loss = instantiate_from_config(loss_config)
-        self.quant_conv = torch.nn.Conv2d(encoder_config.params["z_channels"], quantizer_config.params['e_dim'], 1)
+        # self.quant_conv = torch.nn.Conv2d(encoder_config.params["z_channels"], quantizer_config.params['e_dim'], 1)
         self.post_quant_conv = torch.nn.Conv2d(quantizer_config.params['e_dim'], decoder_config.params["z_channels"], 1)
         
         self.encoder_normalize_embedding = encoder_config.params.get("normalize_embedding", False)

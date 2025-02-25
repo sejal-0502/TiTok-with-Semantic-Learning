@@ -4,8 +4,8 @@ model:
   params:
     monitor: 'val/rec_loss'
     grad_acc_steps: 16
-    pretrained_encoder: 'MAE'
-    dino_model_type: 'VIT_DINOv2'
+    # pretrained_encoder: 'MAE'
+    # dino_model_type: 'VIT_DINOv2'
     encoder_config:
       target: taming.modules.diffusionmodules.model_vit.EncoderVIT
       params:
@@ -21,6 +21,8 @@ model:
       params:
         double_z: False
         z_channels: 768
+        image_size: 256
+        patch_size: 16
         resolution: 256
         in_channels: 3
         out_ch: 3
@@ -35,36 +37,47 @@ model:
       params:
         n_e: 4096
         e_dim: 16
-        beta: 0.25
+        # e_dim: 12
+        # beta: 0.25
+        beta: 0.5
         normalize_embedding: True
+        # normalize_embedding: False
     loss_config:
       target: taming.modules.losses.vqperceptual_dino.VQLPIPSWithDiscriminatorEntropyDINOLoss
       params:
         disc_conditional: False
         disc_in_channels: 3
         disc_start: 20000
-        disc_weight: 0.1
-        adaptive_disc_weight: True
+        # disc_start: 10000
+        # disc_weight: 0.1
+        disc_weight: 0.05
+        # adaptive_disc_weight: True
+        adaptive_disc_weight: False
         codebook_weight: 1.0
         dino_loss_weight: 1.0
         perceptual_weight: 1.0
         l1_loss_weight: 1.0
         l2_loss_weight: 0.0
-        warmup_steps: 5000
-        min_lr_multiplier: 0.1
+        # warmup_steps: 5000
+        warmup_steps: 1000
+        # min_lr_multiplier: 0.1
+        min_lr_multiplier: 0.2
         beta_1: 0.5
         beta_2: 0.9
     entropy_loss_weight_scheduler_config:
       target: taming.lr_scheduler.VQEntropyLossScheduler
       params:
         decay_steps: 10000
-        weight_max: 0.01
-        weight_min: 0.001
+        # weight_max: 0.01
+        weight_max: 0.02
+        # weight_min: 0.001
+        weight_min: 0.002
 
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 3
+    # batch_size: 3
+    batch_size: 4
     num_workers: 16
     train:
       target: taming.data.custom.CustomTrain

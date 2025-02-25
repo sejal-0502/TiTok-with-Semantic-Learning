@@ -96,7 +96,7 @@ class VQLPIPSWithDiscriminatorEntropyDINOLoss(VQLPIPSWithDiscriminator):
             loss += self.codebook_weight * codebook_loss.mean()
             if entropy_loss is not None:
                 loss += self.entropy_loss_weight * entropy_loss.mean()
-            loss += self.dino_loss_weight * dino_loss.mean()
+            # loss += self.dino_loss_weight * dino_loss.mean()
 
             # loss = nll_loss + d_weight * disc_factor * g_loss + self.codebook_weight * codebook_loss.mean() + self.dino_loss_weight*dino_loss.mean()
             # if entropy_loss is not None:

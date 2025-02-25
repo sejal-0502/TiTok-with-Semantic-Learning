@@ -1,6 +1,6 @@
 import torch
 from einops import rearrange, reduce
-from visual_tokenization.taming.modules.vqvae.quantize import VectorQuantizer2
+from taming.modules.vqvae.quantize import VectorQuantizer2
 import torch.nn.functional as F
 
 import torch.nn as nn

@@ -27,8 +27,8 @@ from torchvision.models import inception_v3
 
 import matplotlib.pyplot as plt
 from omegaconf import OmegaConf
-from visual_tokenization.taming.models.vqgan import VQModel, GumbelVQ
-from visual_tokenization.taming.models.vqgan_with_entropy_loss import VQModel2WithEntropyLoss
+from taming.models.vqgan import VQModel, GumbelVQ
+from taming.models.vqgan_with_entropy_loss import VQModel2WithEntropyLoss
 
 from pytorch_fid.fid_score import calculate_fid_given_paths
 from compute_FID import calculate_fid, ImageFolderDataset, get_inception_features

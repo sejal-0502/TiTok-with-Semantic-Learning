@@ -2,6 +2,9 @@
 import math
 import torch
 import torch.nn as nn
+from collections import OrderedDict
+import einops
+import torch.nn.functional as F
 import numpy as np
 from typing import Union, Tuple, List
 from einops import rearrange, repeat
@@ -737,9 +740,62 @@ class Encoder(nn.Module):
         h = self.conv_out(h)
         return h
 
+class ResidualAttentionBlock(nn.Module):
+    def __init__(
+            self,
+            d_model,
+            n_head,
+            mlp_ratio = 4.0,
+            act_layer = nn.GELU,
+            norm_layer = nn.LayerNorm
+        ):
+        super().__init__()
+
+        self.ln_1 = norm_layer(d_model)
+        self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.mlp_ratio = mlp_ratio
+        # optionally we can disable the FFN
+        if mlp_ratio > 0:
+            self.ln_2 = norm_layer(d_model)
+            mlp_width = int(d_model * mlp_ratio)
+            self.mlp = nn.Sequential(OrderedDict([
+                ("c_fc", nn.Linear(d_model, mlp_width)),
+                ("gelu", act_layer()),
+                ("c_proj", nn.Linear(mlp_width, d_model))
+            ]))
+
+    def attention(
+            self,
+            x: torch.Tensor
+    ):
+        return self.attn(x, x, x, need_weights=False)[0]
+
+    def forward(
+            self,
+            x: torch.Tensor,
+    ):
+        attn_output = self.attention(x=self.ln_1(x))
+        x = x + attn_output
+        if self.mlp_ratio > 0:
+            x = x + self.mlp(self.ln_2(x))
+        return x
+
+if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
+    ATTENTION_MODE = 'flash'
+else:
+    try:
+        import xformers
+        import xformers.ops
+        ATTENTION_MODE = 'xformers'
+    except:
+        ATTENTION_MODE = 'math'
+print(f'attention mode is {ATTENTION_MODE}')
+
+def _expand_token(token, batch_size: int):
+    return token.unsqueeze(0).expand(batch_size, -1, -1)
 
 class Decoder(nn.Module):
-    def __init__(self, *, ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,
+    def __init__(self, *, image_size: Union[Tuple[int, int], int], patch_size: Union[Tuple[int, int], int], ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,
                  attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,
                  resolution, z_channels, give_pre_end=False, **ignorekwargs):
         super().__init__()
@@ -751,98 +807,126 @@ class Decoder(nn.Module):
         self.in_channels = in_channels
         self.give_pre_end = give_pre_end
 
-        # compute in_ch_mult, block_in and curr_res at lowest res
-        in_ch_mult = (1,)+tuple(ch_mult)
-        block_in = ch*ch_mult[self.num_resolutions-1]
-        curr_res = resolution // 2**(self.num_resolutions-1)
-        self.z_shape = (1,z_channels,curr_res,curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(
-            self.z_shape, np.prod(self.z_shape)))
+        image_height, image_width = image_size if isinstance(image_size, tuple) \
+                                    else (image_size, image_size)
+        patch_height, patch_width = patch_size if isinstance(patch_size, tuple) \
+                                    else (patch_size, patch_size)
+        self.image_height = image_height
+        self.image_width = image_width
+        self.patch_height = patch_height
+        self.patch_width = patch_width
+        self.grid_size = image_size // patch_size
 
-        # z to block_in
-        self.conv_in = torch.nn.Conv2d(z_channels,
-                                       block_in,
-                                       kernel_size=3,
-                                       stride=1,
-                                       padding=1)
+        # Transformer architecture 
+        self.width = 512
+        self.num_layers = 8
+        self.num_heads = 8
 
-        # middle
-        self.mid = nn.Module()
-        self.mid.block_1 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
-        self.mid.attn_1 = AttnBlock(block_in)
-        self.mid.block_2 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+        self.num_latent_tokens = 128
+        # self.num_latent_tokens = 144
+        # self.token_size = 12
+        self.token_size = 16
+
+        # converting token_size embeddings to self.width
+        self.decoder_embed = nn.Linear(self.token_size, self.width, bias=True)
+        scale = self.width ** -0.5
+
+        # class token
+        self.class_embedding = nn.Parameter(scale * torch.randn(1, self.width))
+
+        # positional embedding
+        self.positional_embedding = nn.Parameter(scale * torch.randn(self.grid_size ** 2 + 1, self.width))
+
+        # adding masked tokens having self.width dimensionality 
+        self.mask_token = nn.Parameter(scale * torch.randn(1, 1, self.width))
         
-        #self.decoder_dino_conv = nn.Conv2d(block_in, 768, kernel_size=1, stride=1, padding=0) # remove hard-coded emb_dim=768
+        # pos embeddings to the latent tokens
+        self.latent_token_positional_embedding = nn.Parameter(scale * torch.randn(self.num_latent_tokens, self.width))
 
-        # upsampling
-        self.up = nn.ModuleList()
-        for i_level in reversed(range(self.num_resolutions)):
-            block = nn.ModuleList()
-            attn = nn.ModuleList()
-            block_out = ch*ch_mult[i_level]
-            for i_block in range(self.num_res_blocks+1):
-                block.append(ResnetBlock(in_channels=block_in,
-                                         out_channels=block_out,
-                                         temb_channels=self.temb_ch,
-                                         dropout=dropout))
-                block_in = block_out
-                if curr_res in attn_resolutions:
-                    attn.append(AttnBlock(block_in))
-            up = nn.Module()
-            up.block = block
-            up.attn = attn
-            if i_level != 0:
-                up.upsample = Upsample(block_in, resamp_with_conv)
-                curr_res = curr_res * 2
-            self.up.insert(0, up) # prepend to get consistent order
+        # layer norm before transformers
+        self.ln_pre = nn.LayerNorm(self.width)
 
-        # end
-        self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(block_in,
-                                        out_ch,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
+        # transformer application
+        self.transformer = nn.ModuleList()
+        for i in range(self.num_layers):
+            self.transformer.append(ResidualAttentionBlock(
+                self.width, self.num_heads, mlp_ratio=4.0
+            ))
 
+        # layer norm after transformers
+        self.ln_post = nn.LayerNorm(self.width)
+
+        self.is_legacy = True
+
+        self.final_conv = nn.Conv2d(512, 3, kernel_size=1)
+
+        # legacy
+        # self.legacy=True processes img but doesnot directly generate an img
+        if self.is_legacy:
+            self.ffn = nn.Sequential(
+                nn.Conv2d(self.width, 2 * self.width, 1, padding=0, bias=True),
+                nn.Tanh(),
+                nn.Conv2d(2 * self.width, self.width, 1, padding=0, bias=True),
+            )
+            self.conv_out = nn.Identity()
+        else:
+        # self.legacy=False directly predicts RGB images
+            self.ffn = nn.Sequential(
+                nn.Conv2d(self.width, self.patch_size * self.patch_size * 3, 1, padding=0, bias=True),
+                Rearrange('b (p1 p2 c) h w -> b c (h p1) (w p2)',
+                    p1 = self.patch_size, p2 = self.patch_size),)
+            self.conv_out = nn.Conv2d(3, 3, 3, padding=1, bias=True)
+
+        
     def forward(self, z):
-        #assert z.shape[1:] == self.z_shape[1:]
-        self.last_z_shape = z.shape
+        # unpacking shape of z into 4 vars
+        N, C, H, W = z.shape
 
-        # timestep embedding
-        temb = None
+        # this assertion check if z_quantized has H=1 and W=self.num_latent_tokens. Fails if doesnot match
+        assert H == 1 and W == self.num_latent_tokens, f"{H}, {W}, {self.num_latent_tokens}"
+        x = z.reshape(N, C*H, W).permute(0, 2, 1) # NLD i.e [N, W, C*H]
+        # upsampling the features from self.token_size to self.width
+        x = self.decoder_embed(x)
 
-        # z to block_in
-        h = self.conv_in(z)
+        # unpacking shape of x in 3 vars, batch, num_of_tokens(seq_len), _ (mostly C)
+        batchsize, seq_len, _ = x.shape
 
-        # middle
-        h = self.mid.block_1(h, temb)
-        h = self.mid.attn_1(h)
-        h = self.mid.block_2(h, temb)
+        # replicates mask tokens to match the no.of patches i.e grid size with same data type as x
+        # this means, we have grid_size*2 no.of mask_tokens with self.width no. of features
+        mask_tokens = self.mask_token.repeat(batchsize, self.grid_size**2, 1).to(x.dtype)
+        mask_tokens = torch.cat([_expand_token(self.class_embedding, mask_tokens.shape[0]).to(mask_tokens.dtype),
+                                    mask_tokens], dim=1)
+        # adds pos embeddings to masked tokens
+        mask_tokens = mask_tokens + self.positional_embedding.to(mask_tokens.dtype)
+        # adds pos embeddings to the latent tokens
+        x = x + self.latent_token_positional_embedding[:seq_len]
+        # concats masked tokens and latent tokens 
+        x = torch.cat([mask_tokens, x], dim=1)
 
-        # upsampling
-        for i_level in reversed(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks+1):
-                h = self.up[i_level].block[i_block](h, temb)
-                if len(self.up[i_level].attn) > 0:
-                    h = self.up[i_level].attn[i_block](h)
-            if i_level != 0:
-                h = self.up[i_level].upsample(h)
+        # layer norm before transformers 
+        x = self.ln_pre(x)
+        # reshaping
+        x = x.permute(1, 0, 2)  # NLD -> LND
+        # passing through the transformer
+        for i in range(self.num_layers):
+            x = self.transformer[i](x)
+        # reshaping again
+        x = x.permute(1, 0, 2)  # LND -> NLD
+        # remove cls embed
+        x = x[:, 1:1+self.grid_size**2] 
+        # layer norm after transformers
+        x = self.ln_post(x)
+        # N L D -> N D H W
+        x = x.permute(0, 2, 1).reshape(batchsize, self.width, self.grid_size, self.grid_size)
+        # applying self.is_legacy=True function
+        x = self.ffn(x.contiguous())
+        # applying self.is_legacy=True function
+        x = self.conv_out(x)
+        x = F.interpolate(x, size=(256, 256), mode='bilinear', align_corners=False)
 
-        # end
-        if self.give_pre_end:
-            return h
-
-        h = self.norm_out(h)
-        h = nonlinearity(h)
-        h = self.conv_out(h)
-
-        return h
+        x = self.final_conv(x)
+        
+        return x
     
 class VUNet(nn.Module):
     def __init__(self, *, ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,

@@ -77,7 +77,7 @@ def get_parser(**parser_kwargs):
         "--resume",
         type=str,
         const=True,
-        default="",
+        default="/work/dlclarge2/mutakeks-storage_titok/project_100_5",
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )
@@ -166,6 +166,18 @@ def get_parser(**parser_kwargs):
         type=str,
         default="",
         help="post-postfix for default name",
+    )
+    parser.add_argument(
+        "--checkpoint_dir",
+        type=str,
+        default=None,
+        help="Custom directory to save checkpoints"
+    )
+    parser.add_argument(
+        "--logdir",
+        type=str,
+        default="",  # default value
+        help="Directory to save vqgan logs"
     )
 
     return parser
@@ -274,9 +286,10 @@ if __name__ == "__main__":
             raise ValueError("Cannot find {}".format(opt.resume))
         if os.path.isfile(opt.resume):
             # determine logdir from checkpoint
-            paths = opt.resume.split("/")
-            idx = len(paths)-paths[::-1].index("vqgan_logs")+1
-            logdir = "/".join(paths[:idx])
+            # paths = opt.resume.split("/")
+            # idx = len(paths)-paths[::-1].index("vqgan_logs")+1
+            # logdir = "/".join(paths[:idx])
+            logdir = os.path.dirname(opt.resume)
             ckpt = opt.resume
             print(f"Resuming from checkpoint {opt.resume}, logdir: {logdir}")
         else:
@@ -295,17 +308,24 @@ if __name__ == "__main__":
         _tmp = logdir.split("/")
         nowname = _tmp[-1]
     else:
-        if opt.name:
-            name = "_"+opt.name
-        elif opt.base:
-            cfg_fname = os.path.split(opt.base[0])[-1]
-            cfg_name = os.path.splitext(cfg_fname)[0]
-            name = "_"+cfg_name
-        else:
-            name = ""
-        nowname = now+name+opt.postfix+"_"+get_jobid()
-        logdir = os.path.join(os.environ.get("VQ_WORK_DIR", "vqgan_logs"), nowname)
+        # if opt.name:
+        #     name = "_"+opt.name
+        # elif opt.base:
+        #     cfg_fname = os.path.split(opt.base[0])[-1]
+        #     cfg_name = os.path.splitext(cfg_fname)[0]
+        #     name = "_"+cfg_name
+        # else:
+        #     name = ""
+        # nowname = now+name+opt.postfix+"_"+get_jobid()
+        # logdir = os.path.join(os.environ.get("VQ_WORK_DIR", "vqgan_logs"), nowname)
 
+        if opt.logdir:
+            logdir = opt.logdir  # Use the custom log directory path provided by user
+        else:
+            # Default behavior
+            nowname = now + name + opt.postfix + "_" + get_jobid()
+            logdir = os.path.join(os.environ.get("VQ_WORK_DIR", "vqgan_logs"), nowname)
+        
     print(">>> Logging to {}".format(logdir))
 
     ckptdir = os.path.join(logdir, "checkpoints")

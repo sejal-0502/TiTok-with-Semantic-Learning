@@ -1,2 +1,2 @@
-from visual_tokenization.taming.modules.losses.vqperceptual import DummyLoss
+from taming.modules.losses.vqperceptual import DummyLoss
 

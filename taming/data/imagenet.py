@@ -7,8 +7,8 @@ import albumentations
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
-from visual_tokenization.taming.data.base import ImagePaths
-from visual_tokenization.taming.util import download, retrieve
+from taming.data.base import ImagePaths
+from taming.util import download, retrieve
 import taming.data.utils as bdu
 
 

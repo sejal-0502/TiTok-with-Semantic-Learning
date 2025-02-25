@@ -2,7 +2,7 @@ import functools
 import torch.nn as nn
 
 
-from visual_tokenization.taming.modules.util import ActNorm
+from taming.modules.util import ActNorm
 
 
 def weights_init(m):
