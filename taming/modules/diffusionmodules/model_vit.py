@@ -199,9 +199,9 @@ class EncoderVIT(nn.Module):
         return rearrange(posemb, '1 d h w -> 1 (h w) d')
 
     def forward(self, img: torch.FloatTensor, latent_tokens) -> torch.FloatTensor:
-        batch_size = img.shape[0]
-        ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width # 16, 16
-        x = self.to_patch_embedding(img) # (b, 256, 768)
+        batch_size = img.shape[0] # batch size : 4
+        ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width # 16, 16 = grid size
+        x = self.to_patch_embedding(img) # (b, 256, 768) - img patches
         x = x + self.resize_pos_embedding((ft_h, ft_w)) # adding patch embeds and pos embeds
 
         # print("---X shape------: ", x.shape, "\n-----X type-----: ",x.dtype)
@@ -219,10 +219,9 @@ class EncoderVIT(nn.Module):
         # print('X[w] shape after transformers : ', x.shape[1]) # 512
         # x = x.reshape(x.shape[0], x.shape[1]//ft_h, x.shape[1]//ft_w, -1) # (b, 16, 16, 768)
         # x = x.permute(0, 3, 1, 2).contiguous() # (b, 768, 16, 16)
-        
-        latent_tokens = x[:, 1+self.grid_size**2:]
+
+        latent_tokens = x[:, 1+self.grid_size**2:] # considering the latent tokens only from the encoder o/p
         # print("Latent tokens shape: ", latent_tokens.shape)
-        # latent_tokens = self.ln_post(latent_tokens)
 
         latent_tokens = latent_tokens.reshape(batch_size, self.model_width, self.num_latent_tokens, 1)
 
