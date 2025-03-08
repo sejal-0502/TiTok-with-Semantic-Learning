@@ -69,16 +69,16 @@ class VQModel2WithEntropyDINOLoss(VQModel2WithEntropyLoss):
         embed_dim = quantizer_config.params['e_dim']
         image_size = encoder_config.params['image_size']
         quantizer_normalize_embedding = quantizer_config.params.get("normalize_embedding", False)
-        self.num_latent_tokens = 128
+        self.num_latent_tokens = encoder_config.params['num_latent_tokens']
         # self.num_latent_tokens = 144
         self.loss = instantiate_from_config(loss_config)
         self.quantizer_normalize_embedding = quantizer_normalize_embedding
         self.quantize = instantiate_from_config(quantizer_config)
         self.entropy_loss_weight_scheduler = instantiate_from_config(entropy_loss_weight_scheduler_config)
         self.grad_acc_steps = grad_acc_steps
-        self.width = 512
-        self.scale = self.width ** -0.5
-        self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
+        self.model_width = encoder_config.params['model_width']
+        self.scale = self.model_width ** -0.5
+        self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.model_width))
        
         # self.dino_model_type = dino_model_type
         # if dino_model_type == 'VIT_DINO':
@@ -109,8 +109,6 @@ class VQModel2WithEntropyDINOLoss(VQModel2WithEntropyLoss):
 
     def forward(self, input):
         quant, diff, _ = self.encode(input)
-        # print('-----Visualization-----: ')
-        # visualize = self.visualize_tokens(quant)
         dec = self.decode(quant)
         # print("-----Decoder Output-----: ", dec.shape)
         return dec, diff, _
@@ -237,10 +235,10 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
         self.patch_size = encoder_config.params['patch_size']
         self.image_size = encoder_config.params['image_size']
         self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_latent_tokens = 128
+        self.num_latent_tokens = encoder_config.params['num_latent_tokens']
         # self.num_latent_tokens = 144
-        self.encoder.width = 512
-        self.width = 512
+        self.encoder.width = encoder_config.params['model_width']
+        self.width = encoder_config.params['model_width']
         self.scale = scale = self.width ** -0.5
         self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
 
@@ -277,34 +275,6 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
         quant, emb_loss, info = self.quantize(h)
         # print("-----Quantizer Output-----: ", quant.shape)
         return quant, emb_loss, info
-
-    # def visualize_tokens(self, quant):
-    #     """ Visualize token representations from the encoder """
-    #     self.eval()  # Set model to eval mode
-    #     with torch.no_grad():
-    #         # quant, _, _ = self.encode(x.unsqueeze(0))  # Encode image
-    #         quant = quant.squeeze(0).cpu().numpy()  # Remove batch dim
-    
-    #     # Reshape tokens to approximate 2D structure
-    #     num_tokens = self.num_latent_tokens  # Should be 128 in your case
-    #     grid_size = int(num_tokens ** 0.5)  # Approximate square grid
-    #     print("----------Visualization Quant Shape-----------: ", quant.shape)
-
-    #     if quant.shape[-1] == num_tokens:
-    #         token_grid = quant.reshape(grid_size, grid_size, -1).mean(axis=-1)  # Average over channels
-    #     else:
-    #         print(f"Unexpected token shape: {quant.shape}")
-    #         return
-    
-    #     # Plot the tokenized representation
-    #     fig = plt.figure(figsize=(6, 6))
-    #     plt.imshow(token_grid, cmap="gray")
-    #     plt.colorbar()
-    #     plt.title("Tokenized Image Representation")
-    #     plt.axis("off")
-    #     plt.savefig("titok_project/token_compression/plots")
-    #     # plt.show()
-         
 
 class VQModelDino(VQModel):
     def __init__(self,

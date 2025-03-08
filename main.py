@@ -77,7 +77,7 @@ def get_parser(**parser_kwargs):
         "--resume",
         type=str,
         const=True,
-        default="/work/dlclarge2/mutakeks-storage_titok/project_100_5",
+        default="",
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )
@@ -176,7 +176,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--logdir",
         type=str,
-        default="",  # default value
+        default="/work/dlclarge2/mutakeks-storage_titok/arch_100_5",  # default value
         help="Directory to save vqgan logs"
     )
 
@@ -323,6 +323,7 @@ if __name__ == "__main__":
             logdir = opt.logdir  # Use the custom log directory path provided by user
         else:
             # Default behavior
+            name = ""
             nowname = now + name + opt.postfix + "_" + get_jobid()
             logdir = os.path.join(os.environ.get("VQ_WORK_DIR", "vqgan_logs"), nowname)
         

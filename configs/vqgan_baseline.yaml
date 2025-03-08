@@ -12,8 +12,12 @@ model:
         image_size: 256
         patch_size: 16
         z_channels: 768
+        # model_width: 768
+        model_width: 512
         depth : 12
         heads : 12
+        token_size: 16
+        num_latent_tokens: 128
         mlp_dim : 3072
         normalize_embedding: True
     decoder_config:
@@ -21,13 +25,16 @@ model:
       params:
         double_z: False
         z_channels: 768
-        image_size: 256
-        patch_size: 16
         resolution: 256
+        # model_width: 768
+        model_width: 512
+        token_size: 16
+        num_latent_tokens: 128
         in_channels: 3
         out_ch: 3
         ch: 128
         ch_mult: [ 1,1,2,2,4]  # num_down = len(ch_mult)-1
+        # ch_mult: [1,1,2,4,6]  # num_down = len(ch_mult)-1
         num_res_blocks: 2
         attn_resolutions: [16]
         dropout: 0.0
@@ -37,11 +44,8 @@ model:
       params:
         n_e: 4096
         e_dim: 16
-        # e_dim: 12
-        # beta: 0.25
-        beta: 0.5
+        beta: 0.25
         normalize_embedding: True
-        # normalize_embedding: False
     loss_config:
       target: taming.modules.losses.vqperceptual_dino.VQLPIPSWithDiscriminatorEntropyDINOLoss
       params:
@@ -49,34 +53,28 @@ model:
         disc_in_channels: 3
         disc_start: 20000
         # disc_start: 10000
-        # disc_weight: 0.1
-        disc_weight: 0.05
-        # adaptive_disc_weight: True
-        adaptive_disc_weight: False
+        disc_weight: 0.1
+        adaptive_disc_weight: True
         codebook_weight: 1.0
         dino_loss_weight: 1.0
         perceptual_weight: 1.0
         l1_loss_weight: 1.0
         l2_loss_weight: 0.0
-        # warmup_steps: 5000
-        warmup_steps: 1000
-        # min_lr_multiplier: 0.1
-        min_lr_multiplier: 0.2
+        warmup_steps: 5000
+        # warmup_steps: 4000
+        min_lr_multiplier: 0.1
         beta_1: 0.5
         beta_2: 0.9
     entropy_loss_weight_scheduler_config:
       target: taming.lr_scheduler.VQEntropyLossScheduler
       params:
         decay_steps: 10000
-        # weight_max: 0.01
-        weight_max: 0.02
-        # weight_min: 0.001
-        weight_min: 0.002
+        weight_max: 0.01
+        weight_min: 0.001
 
 data:
   target: main.DataModuleFromConfig
   params:
-    # batch_size: 3
     batch_size: 4
     num_workers: 16
     train:
