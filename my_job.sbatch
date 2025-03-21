@@ -12,17 +12,17 @@
 
 
 # Execute your program
-srun python -m torch.distributed.launch --nproc_per_node=2 \
-    titok_project/token_compression/main.py \
-    --base titok_project/token_compression/configs/vqgan_baseline.yaml \
-    -t True --n_gpus 2 --n_nodes 1 --name arch_100_4 \
-    --checkpoint_dir /work/dlclarge2/mutakeks-storage_titok/arch_100_4
+# srun python -m torch.distributed.launch --nproc_per_node=2 \
+#     titok_project/token_compression/main.py \
+#     --base titok_project/token_compression/configs/vqgan_baseline.yaml \
+#     -t True --n_gpus 2 --n_nodes 1 --name arch_100_10 \
+#     --checkpoint_dir /work/dlclarge2/mutakeks-storage_titok/arch_100_10
 
 # Resume training 
 # srun python -m torch.distributed.launch --nproc_per_node=2 \
 #     titok_project/token_compression/main.py \
 #     --base titok_project/token_compression/configs/vqgan_baseline.yaml \
-#     -t True --n_gpus 2 --resumes /work/dlclarge2/mutakeks-storage_titok/arch_100/checkpoints/checkpoints/last.ckpt
+#     -t True --n_gpus 2 --resumes /work/dlclarge2/mutakeks-storage_titok/arch_100_5/checkpoints/checkpoints/checkpoints/checkpoints/last.ckpt
 
 # Calculating FID score
 # srun export PYTHONPATH=$PYTHONPATH:/home/mutakeks/titok_project/token_compression

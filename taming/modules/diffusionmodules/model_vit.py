@@ -100,13 +100,13 @@ class FeedForward(nn.Module):
 class Attention(nn.Module):
     def __init__(self, dim: int, heads: int = 8, dim_head: int = 64) -> None:
         super().__init__()
-        inner_dim = dim_head *  heads # (64*8) = 512 : dim of each att head
-        project_out = not (heads == 1 and dim_head == dim) # if head==1, changes dim_head to 768
+        inner_dim = dim_head *  heads 
+        project_out = not (heads == 1 and dim_head == dim) 
 
         self.heads = heads 
-        self.scale = dim_head ** -0.5 # prevents the vals from becoming too large
+        self.scale = dim_head ** -0.5 
 
-        self.attend = nn.Softmax(dim = -1) # softmax applied to attention score to normalize into probabs
+        self.attend = nn.Softmax(dim = -1) 
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
 
         self.to_out = nn.Linear(inner_dim, dim) if project_out else nn.Identity()
@@ -129,32 +129,32 @@ class Transformer(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList([])
         for idx in range(depth):
-            # each transformer layer contains Attention and FF
+            
             layer = nn.ModuleList([PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head)),
                                    PreNorm(dim, FeedForward(dim, mlp_dim))])
             self.layers.append(layer)
-        # applies a final Layer normalization    
+            
         self.norm = nn.LayerNorm(dim)
 
     def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
         for attn, ff in self.layers:
-            x = attn(x) + x # self att + residual
-            x = ff(x) + x # FF + residual
-        return self.norm(x) # normalizes before outputting
+            x = attn(x) + x 
+            x = ff(x) + x 
+        return self.norm(x) 
     
 def _expand_token(token, batch_size: int):
     return token.unsqueeze(0).expand(batch_size, -1, -1)
 
+"""Encoder class used for Image reconstruction - Encoding"""
 class EncoderVIT(nn.Module):
     def __init__(self, image_size: Union[Tuple[int, int], int], patch_size: Union[Tuple[int, int], int],
     mlp_dim: int, depth, heads, model_width, num_latent_tokens, token_size, channels: int = 3, dim_head: int = 64, **ignore_kwargs) -> None:
         super().__init__()
         
-        # dim = z_channels # 768
         image_height, image_width = image_size if isinstance(image_size, tuple) \
-                                    else (image_size, image_size) # (256, 256)
+                                    else (image_size, image_size) 
         patch_height, patch_width = patch_size if isinstance(patch_size, tuple) \
-                                    else (patch_size, patch_size) # (16, 16)
+                                    else (patch_size, patch_size) 
         self.image_height = image_height
         self.image_width = image_width
         self.patch_height = patch_height 
@@ -168,12 +168,12 @@ class EncoderVIT(nn.Module):
         assert image_height % patch_height == 0 and image_width % patch_width == 0, 'Image dimensions must be divisible by the patch size.'
         en_pos_embedding = get_2d_sincos_pos_embed(dim, (image_height // patch_height, image_width // patch_width))
 
-        self.num_patches = (image_height // patch_height) * (image_width // patch_width) # 16*16=256
-        self.patch_dim = channels * patch_height * patch_width # 3 * 16 * 16 = 768
+        self.num_patches = (image_height // patch_height) * (image_width // patch_width) 
+        self.patch_dim = channels * patch_height * patch_width 
 
         self.to_patch_embedding = nn.Sequential(
             nn.Conv2d(channels, dim, kernel_size=patch_size, stride=patch_size), 
-            Rearrange('b c h w -> b (h w) c'), # (b, 256, 768)
+            Rearrange('b c h w -> b (h w) c'), 
         )
 
         scale = dim ** -0.5
@@ -181,7 +181,6 @@ class EncoderVIT(nn.Module):
         self.latent_token_positional_embedding = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.model_width))
        
-        # changes array to tensor of type float and shape (256, 768) --> (1, 256, 768)
         self.en_pos_embedding = nn.Parameter(torch.from_numpy(en_pos_embedding).float().unsqueeze(0), requires_grad=False)
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim)
         self.conv_out = nn.Conv2d(self.model_width, self.token_size, kernel_size=1, bias=True)
@@ -199,39 +198,27 @@ class EncoderVIT(nn.Module):
         return rearrange(posemb, '1 d h w -> 1 (h w) d')
 
     def forward(self, img: torch.FloatTensor, latent_tokens) -> torch.FloatTensor:
-        batch_size = img.shape[0] # batch size : 4
-        ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width # 16, 16 = grid size
-        x = self.to_patch_embedding(img) # (b, 256, 768) - img patches
-        x = x + self.resize_pos_embedding((ft_h, ft_w)) # adding patch embeds and pos embeds
+        batch_size = img.shape[0] 
+        ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width 
+        x = self.to_patch_embedding(img) 
+        x = x + self.resize_pos_embedding((ft_h, ft_w)) 
 
-        # print("---X shape------: ", x.shape, "\n-----X type-----: ",x.dtype)
         x = torch.cat([_expand_token(self.class_embedding, x.shape[0]).to(x.dtype), x], dim=1)
 
         latent_tokens = _expand_token(latent_tokens, x.shape[0]).to(x.dtype)
         latent_tokens = latent_tokens + self.latent_token_positional_embedding.to(x.dtype)
         x = torch.cat([x, latent_tokens], dim=1)
-        # print('X shape before transformers : ', x.shape)
 
-        x = self.transformer(x) # (B, N, D) = (b, 256, 512)
-        # print('X shape after transformers : ', x.shape) # (4, 385, 512)
-        # print('X[0] shape after transformers : ', x.shape) # 4
-        # print('X[h] shape after transformers : ', x.shape[0]) # 385
-        # print('X[w] shape after transformers : ', x.shape[1]) # 512
-        # x = x.reshape(x.shape[0], x.shape[1]//ft_h, x.shape[1]//ft_w, -1) # (b, 16, 16, 768)
-        # x = x.permute(0, 3, 1, 2).contiguous() # (b, 768, 16, 16)
+        x = self.transformer(x) 
 
-        latent_tokens = x[:, 1+self.grid_size**2:] # considering the latent tokens only from the encoder o/p
-        # print("Latent tokens shape: ", latent_tokens.shape)
+        latent_tokens = x[:, 1+self.grid_size**2:] 
 
         latent_tokens = latent_tokens.reshape(batch_size, self.model_width, self.num_latent_tokens, 1)
 
         latent_tokens = self.conv_out(latent_tokens)
         latent_tokens = latent_tokens.reshape(batch_size, self.token_size, 1, self.num_latent_tokens)
         
-        # return x
         return latent_tokens
-    
-#class EncoderVITPretrained(nn.Module):
 
 class DecoderVIT(nn.Module):
     def __init__(self, image_size: Union[Tuple[int, int], int], patch_size: Union[Tuple[int, int], int],

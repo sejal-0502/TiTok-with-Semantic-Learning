@@ -77,7 +77,7 @@ def get_parser(**parser_kwargs):
         "--resume",
         type=str,
         const=True,
-        default="",
+        default="/work/dlclarge2/mutakeks-storage_titok/arch_100_5/checkpoints/checkpoints/checkpoints/checkpoints/last.ckpt",
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )
@@ -112,7 +112,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=100,
+        default=200,
         help="number of epochs",
     )
     parser.add_argument(
@@ -176,7 +176,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--logdir",
         type=str,
-        default="/work/dlclarge2/mutakeks-storage_titok/arch_100_5",  # default value
+        default="",  # default value
         help="Directory to save vqgan logs"
     )
 
@@ -285,10 +285,6 @@ if __name__ == "__main__":
         if not os.path.exists(opt.resume):
             raise ValueError("Cannot find {}".format(opt.resume))
         if os.path.isfile(opt.resume):
-            # determine logdir from checkpoint
-            # paths = opt.resume.split("/")
-            # idx = len(paths)-paths[::-1].index("vqgan_logs")+1
-            # logdir = "/".join(paths[:idx])
             logdir = os.path.dirname(opt.resume)
             ckpt = opt.resume
             print(f"Resuming from checkpoint {opt.resume}, logdir: {logdir}")
@@ -308,17 +304,7 @@ if __name__ == "__main__":
         _tmp = logdir.split("/")
         nowname = _tmp[-1]
     else:
-        # if opt.name:
-        #     name = "_"+opt.name
-        # elif opt.base:
-        #     cfg_fname = os.path.split(opt.base[0])[-1]
-        #     cfg_name = os.path.splitext(cfg_fname)[0]
-        #     name = "_"+cfg_name
-        # else:
-        #     name = ""
-        # nowname = now+name+opt.postfix+"_"+get_jobid()
-        # logdir = os.path.join(os.environ.get("VQ_WORK_DIR", "vqgan_logs"), nowname)
-
+        
         if opt.logdir:
             logdir = opt.logdir  # Use the custom log directory path provided by user
         else:
@@ -344,11 +330,6 @@ if __name__ == "__main__":
         # default to ddp
         trainer_config["distributed_backend"] = "ddp"
         
-        
-
-        # for k in nondefault_trainer_args(opt):
-        #     trainer_config[k] = getattr(opt, k)
-        # trainer_config["gpu"] = 0
         if opt.n_gpus == 0:
             del trainer_config["distributed_backend"]
             cpu = True

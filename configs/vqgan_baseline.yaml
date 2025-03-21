@@ -1,21 +1,18 @@
 model:
-  base_learning_rate: 8e-7 
+  base_learning_rate: 8e-7  
   target: taming.models.vqgan_dino.VQModel2WithEntropyDINOLossMAEinit
   params:
     monitor: 'val/rec_loss'
     grad_acc_steps: 16
-    # pretrained_encoder: 'MAE'
-    # dino_model_type: 'VIT_DINOv2'
     encoder_config:
       target: taming.modules.diffusionmodules.model_vit.EncoderVIT
       params:
         image_size: 256
         patch_size: 16
-        z_channels: 768
-        # model_width: 768
+        z_channels: 512
         model_width: 512
-        depth : 12
-        heads : 12
+        depth : 8
+        heads : 8
         token_size: 16
         num_latent_tokens: 128
         mlp_dim : 3072
@@ -24,17 +21,15 @@ model:
       target: taming.modules.diffusionmodules.model.Decoder
       params:
         double_z: False
-        z_channels: 768
+        z_channels: 512
         resolution: 256
-        # model_width: 768
         model_width: 512
         token_size: 16
         num_latent_tokens: 128
         in_channels: 3
         out_ch: 3
         ch: 128
-        ch_mult: [ 1,1,2,2,4]  # num_down = len(ch_mult)-1
-        # ch_mult: [1,1,2,4,6]  # num_down = len(ch_mult)-1
+        ch_mult: [ 1,1,2,2,4]  
         num_res_blocks: 2
         attn_resolutions: [16]
         dropout: 0.0
@@ -52,7 +47,6 @@ model:
         disc_conditional: False
         disc_in_channels: 3
         disc_start: 20000
-        # disc_start: 10000
         disc_weight: 0.1
         adaptive_disc_weight: True
         codebook_weight: 1.0
@@ -61,7 +55,6 @@ model:
         l1_loss_weight: 1.0
         l2_loss_weight: 0.0
         warmup_steps: 5000
-        # warmup_steps: 4000
         min_lr_multiplier: 0.1
         beta_1: 0.5
         beta_2: 0.9
