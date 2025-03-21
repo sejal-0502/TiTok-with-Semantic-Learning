@@ -27,7 +27,7 @@ class VQModel(pl.LightningModule):
                  colorize_nlabels=None,
                  monitor=None,
                  remap=None,
-                 sane_index_shape=False,  # tell vector quantizer to return indices as bhw
+                 sane_index_shape=False, \
                  ):
         super().__init__()
         self.automatic_optimization = False
@@ -39,7 +39,6 @@ class VQModel(pl.LightningModule):
         self.loss = instantiate_from_config(lossconfig)
         self.quantize = VectorQuantizer(n_embed, embed_dim,  beta=0.25, normalize_embedding=self.normalize_embedding,
                                         remap=remap, sane_index_shape=sane_index_shape)
-        # self.quant_conv = torch.nn.Conv2d(ddconfig["z_channels"], embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
         self.num_latent_tokens = 192
         self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
@@ -70,18 +69,12 @@ class VQModel(pl.LightningModule):
         h = self.quant_conv(h)
         if self.encoder_normalize_embedding:
             h = F.normalize(h, p=2, dim=1)
-            #print("Normalized encoder embedding")
         quant, emb_loss, info = self.quantize(h)
         return quant, emb_loss, info
 
     def decode(self, quant):
         quant = self.post_quant_conv(quant)
         return self.decoder(quant)
-        
-    # def decode_code(self, code_b):
-    #     quant_b = self.quantize.embed_code(code_b)
-    #     dec = self.decode(quant_b)
-    #     return dec
     
     def decode_code(self, code_b):
         quant_b = self.quantize.get_codebook_entry(code_b.view(-1), (-1, code_b.size(1), code_b.size(2), self.quantize.e_dim))
@@ -448,15 +441,13 @@ class GumbelVQ(VQModel):
 
     def validation_step(self, batch, batch_idx):
         x = self.get_input(batch, self.image_key)
-        xrec, qloss = self(x) #, return_pred_indices=True)
+        xrec, qloss = self(x) 
         aeloss, log_dict_ae = self.loss(qloss, x, xrec, 0, self.global_step,
                                         last_layer=self.get_last_layer(), split="val")
 
         discloss, log_dict_disc = self.loss(qloss, x, xrec, 1, self.global_step,
                                             last_layer=self.get_last_layer(), split="val")
         rec_loss = log_dict_ae["val/rec_loss"]
-        # self.log("val/rec_loss", rec_loss,
-        #          prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.log("val/aeloss", aeloss,
                  prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.log_dict(log_dict_ae)
