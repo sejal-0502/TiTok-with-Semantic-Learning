@@ -77,7 +77,7 @@ def get_parser(**parser_kwargs):
         "--resume",
         type=str,
         const=True,
-        default="/work/dlclarge2/mutakeks-storage_titok/arch_100_5/checkpoints/checkpoints/checkpoints/checkpoints/last.ckpt",
+        default="",
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )
@@ -112,7 +112,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--num_epochs",
         type=int,
-        default=200,
+        default=100,
         help="number of epochs",
     )
     parser.add_argument(
@@ -176,7 +176,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--logdir",
         type=str,
-        default="",  # default value
+        default="/work/dlclarge2/mutakeks-storage_titok/arch_100_5",  # default value
         help="Directory to save vqgan logs"
     )
 
@@ -257,10 +257,6 @@ class DataModuleFromConfig(pl.LightningDataModule):
 
 if __name__ == "__main__":
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-
-    # add cwd for convenience and to make classes in this file available when
-    # running as `python main.py`
-    # (in particular `main.DataModuleFromConfig`)
     sys.path.append(os.getcwd())
 
     parser = get_parser()

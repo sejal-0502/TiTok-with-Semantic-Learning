@@ -1,9 +1,0 @@
-cpu-bind=MASK - dagobert, task  0  0 [2709]: mask 0x40100401 set
-cpu-bind=MASK - dagobert, task  0  0 [2724]: mask 0x40100401 set
-Traceback (most recent call last):
-  File "/home/mutakeks/titok_project/token_compression/main.py", line 23, in <module>
-    from taming.data.utils import custom_collate
-  File "/home/mutakeks/titok_project/token_compression/taming/data/utils.py", line 10, in <module>
-    from visual_tokenization.taming.data.helper_types import Annotation
-ModuleNotFoundError: No module named 'visual_tokenization'
-srun: error: dagobert: task 0: Exited with exit code 1

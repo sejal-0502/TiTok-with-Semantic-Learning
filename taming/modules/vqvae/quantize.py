@@ -266,8 +266,8 @@ class VectorQuantizer2(nn.Module):
         assert len(ishape)>1
         inds = inds.reshape(ishape[0],-1)
         used = self.used.to(inds)
-        if self.re_embed > self.used.shape[0]: # extra token
-            inds[inds>=self.used.shape[0]] = 0 # simply set to zero
+        if self.re_embed > self.used.shape[0]: 
+            inds[inds>=self.used.shape[0]] = 0 
         back=torch.gather(used[None,:][inds.shape[0]*[0],:], 1, inds)
         return back.reshape(ishape)
 
@@ -278,12 +278,9 @@ class VectorQuantizer2(nn.Module):
 
         if self.encoder_normalize_embedding:
             self.embedding.weight.data = F.normalize(self.embedding.weight.data, dim=1)
-            #print (f'Normalized embedding weights')
-
-        # reshape z -> (batch, height, width, channel) and flatten
+           
         z = rearrange(z, 'b c h w -> b h w c').contiguous()
         z_flattened = z.view(-1, self.e_dim)
-        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
         d = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + \
             torch.sum(self.embedding.weight**2, dim=1) - 2 * \
@@ -309,9 +306,9 @@ class VectorQuantizer2(nn.Module):
         z_q = rearrange(z_q, 'b h w c -> b c h w').contiguous()
 
         if self.remap is not None:
-            min_encoding_indices = min_encoding_indices.reshape(z.shape[0],-1) # add batch axis
+            min_encoding_indices = min_encoding_indices.reshape(z.shape[0],-1)
             min_encoding_indices = self.remap_to_used(min_encoding_indices)
-            min_encoding_indices = min_encoding_indices.reshape(-1,1) # flatten
+            min_encoding_indices = min_encoding_indices.reshape(-1,1) 
 
         if self.sane_index_shape:
             min_encoding_indices = min_encoding_indices.reshape(
@@ -320,18 +317,15 @@ class VectorQuantizer2(nn.Module):
         return z_q, loss, (perplexity, min_encodings, min_encoding_indices)
 
     def get_codebook_entry(self, indices, shape):
-        # shape specifying (batch, height, width, channel)
         if self.remap is not None:
-            indices = indices.reshape(shape[0],-1) # add batch axis
+            indices = indices.reshape(shape[0],-1) 
             indices = self.unmap_to_all(indices)
-            indices = indices.reshape(-1) # flatten again
+            indices = indices.reshape(-1) 
 
-        # get quantized latent vectors
         z_q = self.embedding(indices)
 
         if shape is not None:
             z_q = z_q.view(shape)
-            # reshape back to match original input shape
             z_q = z_q.permute(0, 3, 1, 2).contiguous()
 
         return z_q
@@ -350,10 +344,8 @@ class VectorQuantizerMM(VectorQuantizer2):
         assert rescale_logits==False, "Only for interface compatible with Gumbel"
         assert return_logits==False, "Only for interface compatible with Gumbel"
 
-        # reshape z -> (batch, height, width, channel) and flatten
         z = rearrange(z, 'b c h w -> b h w c').contiguous()
         z_flattened = z.view(-1, self.e_dim)
-        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
         d = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + \
             torch.sum(self.embedding.weight**2, dim=1) - 2 * \
@@ -369,21 +361,18 @@ class VectorQuantizerMM(VectorQuantizer2):
         # compute loss for embedding
         if not self.legacy:
             loss = self.beta * torch.mean((z_q.detach()-z)**2) + \
-                   torch.mean((z_q - z.detach()) ** 2) #+ self.beta * mm_loss
+                   torch.mean((z_q - z.detach()) ** 2) 
         else:
             loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
-                     torch.mean((z_q - z.detach()) ** 2) #+ self.beta * mm_loss
+                     torch.mean((z_q - z.detach()) ** 2) 
             
-        # preserve gradients
         z_q = z + (z_q - z).detach()
-
-        # reshape back to match original input shape
         z_q = rearrange(z_q, 'b h w c -> b c h w').contiguous()
 
         if self.remap is not None:
-            min_encoding_indices = min_encoding_indices.reshape(z.shape[0],-1) # add batch axis
+            min_encoding_indices = min_encoding_indices.reshape(z.shape[0],-1)
             min_encoding_indices = self.remap_to_used(min_encoding_indices)
-            min_encoding_indices = min_encoding_indices.reshape(-1,1) # flatten
+            min_encoding_indices = min_encoding_indices.reshape(-1,1) 
 
         if self.sane_index_shape:
             min_encoding_indices = min_encoding_indices.reshape(

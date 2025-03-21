@@ -14,7 +14,7 @@ def log(t, eps = 1e-5):
 def entropy(prob):
     return (-prob * log(prob)).sum(dim=-1)
 
-
+"""Quantizer class - no chnages as it works the same as quantizer in titok"""
 class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
 
     def __init__(self, n_e, e_dim, beta, normalize_embedding, remap=None, unknown_index="random", sane_index_shape=False, legacy=True,
@@ -29,9 +29,7 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
 
     def entropy_loss(self, distances, inv_temperature=100.):
         prob = (-distances * inv_temperature).softmax(dim = -1)
-        # prob = rearrange(prob, 'b n ... -> (b n) ...')
-
-        # whether to only use a fraction of probs, for reducing memory
+ 
         if self.frac_per_sample_entropy < 1.:
             num_tokens = prob.shape[0]
             num_sampled_tokens = int(num_tokens * self.frac_per_sample_entropy)
@@ -40,15 +38,11 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
         else:
             per_sample_probs = prob
         
-        # calculate per sample entropy
         per_sample_entropy = entropy(per_sample_probs).mean()
 
-        # distribution over all available tokens in the batch
         avg_prob = reduce(per_sample_probs, '... d -> d', 'mean')
         codebook_entropy = entropy(avg_prob).mean()
 
-        # 1. entropy will be nudged to be low for each code, to encourage the network to output confident predictions
-        # 2. codebook entropy will be nudged to be high, to encourage all codes to be uniformly used within the batch
         entropy_aux_loss = per_sample_entropy - self.diversity_gamma * codebook_entropy
         return entropy_aux_loss
     
@@ -61,10 +55,9 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
         if self.quantizer_normalize_embedding:
             self.embedding.weight.data = F.normalize(self.embedding.weight.data, dim=1)
 
-        # reshape z -> (batch, height, width, channel) and flatten
+ 
         z = rearrange(z, 'b c h w -> b h w c').contiguous()
         z_flattened = z.view(-1, self.e_dim)
-        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
         d = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + \
             torch.sum(self.embedding.weight**2, dim=1) - 2 * \
@@ -76,7 +69,6 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
         perplexity = None
         min_encodings = None
 
-        # compute loss for embedding
         if not self.legacy:
             loss = self.beta * torch.mean((z_q.detach()-z)**2) + \
                    torch.mean((z_q - z.detach()) ** 2)
@@ -84,7 +76,6 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
             loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
                    torch.mean((z_q - z.detach()) ** 2)
 
-        # compute entropy aux loss
         if self.training:
             entropy_aux_loss = self.entropy_loss(d, inv_temperature=100.)
         else:
@@ -93,12 +84,11 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
         # preserve gradients
         z_q = z + (z_q - z).detach()
 
-        # reshape back to match original input shape
         z_q = rearrange(z_q, 'b h w c -> b c h w').contiguous()
         z = rearrange(z, 'b h w c -> b c h w').contiguous()
 
         if self.remap is not None:
-            min_encoding_indices = min_encoding_indices.reshape(z.shape[0],-1) # add batch axis
+            min_encoding_indices = min_encoding_indices.reshape(z.shape[0],-1) 
             min_encoding_indices = self.remap_to_used(min_encoding_indices)
             min_encoding_indices = min_encoding_indices.reshape(-1,1) # flatten
 
@@ -106,4 +96,4 @@ class VectorQuantizer2WithEntropyLoss(VectorQuantizer2):
             min_encoding_indices = min_encoding_indices.reshape(
                 z_q.shape[0], z_q.shape[2], z_q.shape[3])
 
-        return z_q, (loss, entropy_aux_loss), (perplexity, min_encodings, min_encoding_indices) #, z)
+        return z_q, (loss, entropy_aux_loss), (perplexity, min_encodings, min_encoding_indices) 

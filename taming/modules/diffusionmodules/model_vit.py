@@ -13,24 +13,24 @@ from timm.models.layers import trunc_normal_
 from taming.modules.diffusionmodules.model import nonlinearity, ResnetBlock, AttnBlock, Normalize, Upsample
 
 
-def get_1d_sincos_pos_embed_from_grid(embed_dim, pos): # (768//2, (16, 16)) 
+def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
     embed_dim: output dimension for each position
     pos: a list of positions to be encoded: size (M,)
     out: (M, D)
     """
-    assert embed_dim % 2 == 0 # embed_dim must be an even number
-    omega = np.arange(embed_dim // 2, dtype=float) # 1D array [0., 1., .... 383.]
-    omega /= embed_dim / 2. # divides all entries in omega by 384 i.e scales the vals betwn 0 and 1
-    omega = 1. / 10000**omega  # (D/2,)
+    assert embed_dim % 2 == 0 
+    omega = np.arange(embed_dim // 2, dtype=float) 
+    omega /= embed_dim / 2.
+    omega = 1. / 10000**omega 
 
-    pos = pos.reshape(-1)  # ensures that pos has shape (M,)
-    out = np.einsum('m,d->md', pos, omega)  # multiply each element in pos with omega (M, D/2) = (256, 384)
+    pos = pos.reshape(-1)  
+    out = np.einsum('m,d->md', pos, omega)  
 
-    emb_sin = np.sin(out) # (M, D/2)
-    emb_cos = np.cos(out) # (M, D/2)
+    emb_sin = np.sin(out) 
+    emb_cos = np.cos(out) 
 
-    emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
+    emb = np.concatenate([emb_sin, emb_cos], axis=1)  
     return emb # 2D array
 
 def init_weights(m):
@@ -46,29 +46,28 @@ def init_weights(m):
         w = m.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
-def get_2d_sincos_pos_embed_from_grid(embed_dim, grid): # (768, [2, 1, 16, 16])
-    assert embed_dim % 2 == 0 # embed_dim must be an even number
+def get_2d_sincos_pos_embed_from_grid(embed_dim, grid): 
+    assert embed_dim % 2 == 0 
 
-    # use half of dimensions to encode grid_h
-    emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (768//2, (16, 16)) 
-    emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (768//2, (16, 16)) 
+    emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  
+    emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  
 
-    emb = np.concatenate([emb_h, emb_w], axis=1) # (H*W, D)
+    emb = np.concatenate([emb_h, emb_w], axis=1) 
     return emb # 2D array
 
-def get_2d_sincos_pos_embed(embed_dim, grid_size): # (768, (16, 16))
+def get_2d_sincos_pos_embed(embed_dim, grid_size): 
     """
     grid_size: int or (int, int) of the grid height and width
     return:
     pos_embed: [grid_size*grid_size, embed_dim] or [1+grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
     """
-    grid_size = (grid_size, grid_size) if type(grid_size) != tuple else grid_size # (16, 16)
-    grid_h = np.arange(grid_size[0], dtype=np.float32) # 1D array [0., 1., 2.,.....15.]
-    grid_w = np.arange(grid_size[1], dtype=np.float32) # 1D array [0., 1., 2.,.....15.]
-    grid = np.meshgrid(grid_w, grid_h)  # 2D array with w as rows (x-coordinate) and h as cols (y-coordinate) : [16, 16]
-    grid = np.stack(grid, axis=0) # comnines grid into a 3D array [2, 16, 16]
+    grid_size = (grid_size, grid_size) if type(grid_size) != tuple else grid_size 
+    grid_h = np.arange(grid_size[0], dtype=np.float32) 
+    grid_w = np.arange(grid_size[1], dtype=np.float32) 
+    grid = np.meshgrid(grid_w, grid_h) 
+    grid = np.stack(grid, axis=0) 
 
-    grid = grid.reshape([2, 1, grid_size[0], grid_size[1]]) # [2, 1, 16, 16]
+    grid = grid.reshape([2, 1, grid_size[0], grid_size[1]]) 
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
 
     return pos_embed
@@ -176,16 +175,18 @@ class EncoderVIT(nn.Module):
             Rearrange('b c h w -> b (h w) c'), 
         )
 
+        self.en_pos_embedding = nn.Parameter(torch.from_numpy(en_pos_embedding).float().unsqueeze(0), requires_grad=False)
+        self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim)
+
+        self.apply(init_weights)
+
+        """Additional - for titok ---START---"""
         scale = dim ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(1, self.model_width))
         self.latent_token_positional_embedding = nn.Parameter(
-            scale * torch.randn(self.num_latent_tokens, self.model_width))
-       
-        self.en_pos_embedding = nn.Parameter(torch.from_numpy(en_pos_embedding).float().unsqueeze(0), requires_grad=False)
-        self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim)
+            scale * torch.randn(self.num_latent_tokens, self.model_width))        
         self.conv_out = nn.Conv2d(self.model_width, self.token_size, kernel_size=1, bias=True)
-
-        self.apply(init_weights)
+        """---END---"""
 
     def resize_pos_embedding(self, new_shape):
         orig_posemb_h = self.image_height // self.patch_height
@@ -197,6 +198,7 @@ class EncoderVIT(nn.Module):
         posemb = torch.nn.functional.interpolate(posemb, new_shape, mode='bicubic')
         return rearrange(posemb, '1 d h w -> 1 (h w) d')
 
+    """Additonal changes for titok - for additing learnable latent tokens and outputting them"""
     def forward(self, img: torch.FloatTensor, latent_tokens) -> torch.FloatTensor:
         batch_size = img.shape[0] 
         ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width 
@@ -241,15 +243,8 @@ class DecoderVIT(nn.Module):
 
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim)
         self.patch_embed = PatchEmbed(image_size, patch_size, dim, dim)
-        #de_pos_embedding = get_2d_sincos_pos_embed(dim, (image_height // patch_height, image_width // patch_width))
-        #self.de_pos_embedding = nn.Parameter(torch.from_numpy(de_pos_embedding).float().unsqueeze(0), requires_grad=False)
         scale = dim ** -0.5
         self.de_pos_embedding = nn.Parameter(scale*torch.randn(self.num_patches, dim))
-
-
-        #self.to_pixels = nn.Linear(dim, patch_size**2 * 3)
-        #self.to_pixels = nn.Sequential(nn.Linear(dim, patch_size**2 * 3),
-        #                                nn.ConvTranspose2d(768, 3, 16, 16))
 
         
         self.norm = nn.LayerNorm(dim)
@@ -265,31 +260,9 @@ class DecoderVIT(nn.Module):
                       hh=image_height // patch_height, 
                       ww=image_height // patch_height, 
                       sh=patch_size, sw=patch_size))
-            # rearrange(
-            #     x, "b (hh ww) (c sh sw) -> b c (hh sh) (ww sw)",
-            #     hh = image_height // patch_height, ww=image_height // patch_height,
-            #     sh=patch_size, sw=patch_size
-            # )
-            #)
 
-
-
-        # self.to_pixel = nn.Sequential(
-        #     Rearrange('b (h w) c -> b c h w', h=image_height // patch_height),
-        #     nn.ConvTranspose2d(dim, 3, kernel_size=patch_size, stride=patch_size)
-        # )
-        #                  #nn.ReLU(), 
-                         #nn.ConvTranspose2d(256, 3, 4, 4))
-        
-        #self.to_pixels = nn.Sequential(
-        #    nn.Linear(dim, 256),  # Example size, adjust as needed
-        #    nn.ReLU(),
-        #    nn.Linear(256, patch_size**2 * 3)  # Adjust output size based on image size and channels
-        #)
-        #self.apply(init_weights)
         self.init_parameters()
-        
-        #self.linear = nn.Linear(dim, z_channels)
+
 
     def init_parameters(self):
         if self.de_pos_embedding is not None:
@@ -328,16 +301,10 @@ class DecoderVIT(nn.Module):
         x = x + self.de_pos_embedding
         x = self.norm(x)
         x = self.transformer(x) # output (B, N, D)
-        #x = x.permute(0,2,1).contiguous()
-        #x = x.view(-1, x.size(1), self.patch_height, self.patch_width) 
 
-        #x = self.norm(x)
         x = self.MLP(x)
         x = self.to_pixel(x) # from SimMIM model
 
-        #x = self.unpatchify(x)
-        #x = x.view(x.shape[0], x.shape[1], -1, self.patch_height, self.patch_width)
-        #x = x.view(x.shape[0], -1, self.patch_height*(self.image_height//self.patch_height), self.patch_width*(self.image_width//self.patch_width))
         return x
 
 
@@ -382,9 +349,7 @@ class DecoderDINOCNN(nn.Module):
                                        temb_channels=self.temb_ch,
                                        dropout=dropout)
         
-        self.decoder_dino_conv = nn.Conv2d(block_in, 512, kernel_size=1, stride=1, padding=0) # remove hard-coded emb_dim=768
-        #self.decoder_dino_conv = nn.Conv2d(block_in, 1024, kernel_size=1, stride=1, padding=0) # remove hard-coded emb_dim=768
-
+        self.decoder_dino_conv = nn.Conv2d(block_in, 512, kernel_size=1, stride=1, padding=0)
         # upsampling
         self.up = nn.ModuleList()
         for i_level in reversed(range(self.num_resolutions)):
@@ -434,9 +399,6 @@ class DecoderDINOCNN(nn.Module):
         h = self.mid.attn_1(h)
         h = self.mid.block_2(h, temb)
 
-        # decoder dino output
-        #decoder_dino_output = self.decoder_dino_conv(h)
-
         # upsampling
         for i_level in reversed(range(self.num_resolutions)):
             for i_block in range(self.num_res_blocks+1):
@@ -462,45 +424,3 @@ class DecoderDINOCNN(nn.Module):
         x = x.permute(0, 3, 1, 2)
 
         return h, x
-    
-# # Decoder with two branches: VIT for dino loss and CNN for reconstruction
-# class DecoderDINOCNN(Decoder):
-#     def __init__(self, *, ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,
-#                  attn_resolutions, dropout=0.0, resamp_with_conv=True, in_channels,
-#                  resolution, z_channels, encoder_model="VIT", num_layers=1, emb_dim=768, num_heads=12, num_mlp_ratio=4,  give_pre_end=False, **ignorekwargs):
-#         super().__init__(ch=ch, out_ch=out_ch, ch_mult=ch_mult, num_res_blocks=num_res_blocks,
-#                          attn_resolutions=attn_resolutions, dropout=dropout, resamp_with_conv=resamp_with_conv,
-#                          in_channels=in_channels, resolution=resolution, z_channels=z_channels, give_pre_end=give_pre_end)
-
-#         #self.num_layers = num_layers
-#         #self.num_heads = num_heads
-#         #self.num_mlp_ratio = num_mlp_ratio
-#         self.emb_dim = emb_dim
-#         self.encoder_model = encoder_model
-
-#         encoder_layer = TransformerEncoderLayer(d_model=emb_dim, nhead=num_heads, dim_feedforward=emb_dim*num_mlp_ratio)
-#         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers=num_layers)
-#         self.decoder_dino_conv = nn.Conv2d(z_channels, emb_dim, kernel_size=1, stride=1, padding=0) # remove hard-coded emb_dim=768
-#         #self.post_quant_conv = torch.nn.Conv2d(embed_dim, ddconfig["z_channels"], 1)
-#         #self.decoder_dino_conv = nn.Conv2d(block_in, 768, kernel_size=1, stride=1, padding=0) # remove hard-coded emb_dim=768
-
-#     def forward(self, z, dino_dist=True):
-
-#         h = super().forward(z)
-#         import pdb; pdb.set_trace()
-#         # decoder dino output
-#         if dino_dist:
-#             #import pdb; pdb.set_trace()
-#             if self.encoder_model == "CNN":
-#                 #import pdb; pdb.set_trace()
-#                 x = self.decoder_dino_conv(h) # 256, 768
-#             else:
-#                 x = h
-#             x = x.permute(0, 2, 3, 1)
-#             x = x.reshape(x.shape[0], -1, self.emb_dim)
-#             x = self.transformer_encoder(x)
-#             x = x.reshape(x.shape[0], self.last_z_shape[2], self.last_z_shape[3], self.emb_dim)
-#             x = x.permute(0, 3, 1, 2)
-#             return h, x
-
-#         return h
