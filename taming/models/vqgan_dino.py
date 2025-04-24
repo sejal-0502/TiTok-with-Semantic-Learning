@@ -97,7 +97,9 @@ class VQModel2WithEntropyDINOLoss(VQModel2WithEntropyLoss):
 
     def forward(self, input):
         quant, diff, _ = self.encode(input)
+        # print("----------Quant: ------------", quant.shape)
         dec = self.decode(quant)
+        # print("----------Decoder: ------------", dec.shape)
         return dec, diff, _
 
     def dino_loss(self, dino_output, decoder_dino_output):
@@ -193,7 +195,7 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
                  image_key="image",
                  colorize_nlabels=None,
                  monitor=None,
-                 entropy_loss_weight_scheduler_config=None,
+                 entropy_loss_weight_scheduler_config=None
                  ):
         super().__init__(encoder_config, decoder_config, quantizer_config, loss_config, 
                          grad_acc_steps, ckpt_path, ignore_keys, image_key, colorize_nlabels, 
@@ -213,6 +215,7 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
         self.encoder = instantiate_from_config(encoder_config)
 
     def encode(self, x):
+        # print("----------Input: ------------", x.shape)
         h = self.encoder(x, latent_tokens=self.latent_tokens)
         if self.encoder_normalize_embedding:
             h = F.normalize(h, p=2, dim=1)

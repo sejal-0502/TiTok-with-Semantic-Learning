@@ -19,14 +19,14 @@ class LambdaWarmUpCosineScheduler:
         if self.verbosity_interval > 0:
             if n % self.verbosity_interval == 0: print(f"current step: {n}, recent lr-multiplier: {self.last_lr}")
         if n < self.lr_warm_up_steps:
-            lr = (self.lr_max - self.lr_start) / self.lr_warm_up_steps * n + self.lr_start
+            lr = (self.lr_max - self.lr_start) / self.lr_warm_up_steps * n + self.lr_start # increases the LR from start to max over the warmup steps
             self.last_lr = lr
             return lr
         else:
             t = (n - self.lr_warm_up_steps) / (self.lr_max_decay_steps - self.lr_warm_up_steps)
             t = min(t, 1.0)
             lr = self.lr_min + 0.5 * (self.lr_max - self.lr_min) * (
-                    1 + np.cos(t * np.pi))
+                    1 + np.cos(t * np.pi)) # uses a cosine decay formula
             self.last_lr = lr
             return lr
 

@@ -175,7 +175,8 @@ class EncoderVIT(nn.Module):
             Rearrange('b c h w -> b (h w) c'), 
         )
 
-        self.en_pos_embedding = nn.Parameter(torch.from_numpy(en_pos_embedding).float().unsqueeze(0), requires_grad=False)
+        # self.en_pos_embedding = nn.Parameter(torch.from_numpy(en_pos_embedding).float().unsqueeze(0), requires_grad=False)
+        self.en_pos_embedding = nn.Parameter(torch.from_numpy(en_pos_embedding).float().unsqueeze(0), requires_grad=True)
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim)
 
         self.apply(init_weights)
@@ -200,10 +201,12 @@ class EncoderVIT(nn.Module):
 
     """Additonal changes for titok - for additing learnable latent tokens and outputting them"""
     def forward(self, img: torch.FloatTensor, latent_tokens) -> torch.FloatTensor:
-        batch_size = img.shape[0] 
-        ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width 
+        batch_size = img.shape[0] # 4
+        ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width # 16, 16
         x = self.to_patch_embedding(img) 
         x = x + self.resize_pos_embedding((ft_h, ft_w)) 
+
+        print("X shape after pos embedding : ", x.shape) # [4, 256, 512]
 
         x = torch.cat([_expand_token(self.class_embedding, x.shape[0]).to(x.dtype), x], dim=1)
 
@@ -215,11 +218,14 @@ class EncoderVIT(nn.Module):
 
         latent_tokens = x[:, 1+self.grid_size**2:] 
 
-        latent_tokens = latent_tokens.reshape(batch_size, self.model_width, self.num_latent_tokens, 1)
+        latent_tokens = latent_tokens.reshape(batch_size, self.model_width, self.num_latent_tokens, 1) # 4, 512, 128, 1
+
+        print("Latent tokens with model width : ", latent_tokens.shape)
 
         latent_tokens = self.conv_out(latent_tokens)
         latent_tokens = latent_tokens.reshape(batch_size, self.token_size, 1, self.num_latent_tokens)
-        
+        print("Latent tokens with token size : ", latent_tokens.shape)
+
         return latent_tokens
 
 class DecoderVIT(nn.Module):

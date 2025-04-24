@@ -171,11 +171,11 @@ class VQModel(pl.LightningModule):
                 return step/warmup_steps
             # After warmup_steps, we just return 1. This could be modified to implement your own schedule
             else:
-                progress = (step - warmup_steps) / (total_steps - warmup_steps)
-                cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
-                decayed = (1 - min_lr) * cosine_decay + min_lr
-                return decayed
-            #return 1.0        
+                # progress = (step - warmup_steps) / (total_steps - warmup_steps)
+                # cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
+                # decayed = (1 - min_lr) * cosine_decay + min_lr
+                # return decayed
+                return 1.0        
         return LambdaLR(optimizer, lr_lambda)
 
     def configure_optimizers(self):
