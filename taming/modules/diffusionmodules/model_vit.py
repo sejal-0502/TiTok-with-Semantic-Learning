@@ -184,6 +184,7 @@ class EncoderVIT(nn.Module):
         """Additional - for titok ---START---"""
         scale = dim ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(1, self.model_width))
+        self.latent_tokens = nn.Parameter(scale * torch.randn(self.num_latent_tokens, self.model_width))
         self.latent_token_positional_embedding = nn.Parameter(
             scale * torch.randn(self.num_latent_tokens, self.model_width))        
         self.conv_out = nn.Conv2d(self.model_width, self.token_size, kernel_size=1, bias=True)
@@ -200,17 +201,17 @@ class EncoderVIT(nn.Module):
         return rearrange(posemb, '1 d h w -> 1 (h w) d')
 
     """Additonal changes for titok - for additing learnable latent tokens and outputting them"""
-    def forward(self, img: torch.FloatTensor, latent_tokens) -> torch.FloatTensor:
+    def forward(self, img: torch.FloatTensor) -> torch.FloatTensor:
         batch_size = img.shape[0] # 4
         ft_h, ft_w = img.shape[-2]//self.patch_height, img.shape[-1]//self.patch_width # 16, 16
         x = self.to_patch_embedding(img) 
         x = x + self.resize_pos_embedding((ft_h, ft_w)) 
 
-        print("X shape after pos embedding : ", x.shape) # [4, 256, 512]
+        # print("X shape after pos embedding : ", x.shape) # [4, 256, 512]
 
         x = torch.cat([_expand_token(self.class_embedding, x.shape[0]).to(x.dtype), x], dim=1)
 
-        latent_tokens = _expand_token(latent_tokens, x.shape[0]).to(x.dtype)
+        latent_tokens = _expand_token(self.latent_tokens, x.shape[0]).to(x.dtype)
         latent_tokens = latent_tokens + self.latent_token_positional_embedding.to(x.dtype)
         x = torch.cat([x, latent_tokens], dim=1)
 
@@ -220,11 +221,11 @@ class EncoderVIT(nn.Module):
 
         latent_tokens = latent_tokens.reshape(batch_size, self.model_width, self.num_latent_tokens, 1) # 4, 512, 128, 1
 
-        print("Latent tokens with model width : ", latent_tokens.shape)
+        # print("Latent tokens with model width : ", latent_tokens.shape)
 
         latent_tokens = self.conv_out(latent_tokens)
         latent_tokens = latent_tokens.reshape(batch_size, self.token_size, 1, self.num_latent_tokens)
-        print("Latent tokens with token size : ", latent_tokens.shape)
+        # print("Latent tokens with token size : ", latent_tokens.shape)
 
         return latent_tokens
 

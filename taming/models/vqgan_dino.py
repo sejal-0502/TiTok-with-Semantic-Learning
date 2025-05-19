@@ -77,7 +77,7 @@ class VQModel2WithEntropyDINOLoss(VQModel2WithEntropyLoss):
         self.grad_acc_steps = grad_acc_steps
         self.model_width = encoder_config.params['model_width']
         self.scale = self.model_width ** -0.5
-        self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.model_width))
+        # self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.model_width))
 
         self.encoder_normalize_embedding = encoder_config.params.get("normalize_embedding", False)
 
@@ -85,7 +85,7 @@ class VQModel2WithEntropyDINOLoss(VQModel2WithEntropyLoss):
         self.loss.entropy_loss_weight = self.entropy_loss_weight_scheduler(self.global_step)
 
     def encode(self, x):
-        h = self.encoder(x, latent_tokens = self.latent_tokens)
+        h = self.encoder(x)
         if self.encoder_normalize_embedding:
             h = F.normalize(h, p=2, dim=1)
         quant, emb_loss, info = self.quantize(h)
@@ -210,13 +210,13 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
         self.encoder.width = encoder_config.params['model_width']
         self.width = encoder_config.params['model_width']
         self.scale = scale = self.width ** -0.5
-        self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
+        # self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
 
         self.encoder = instantiate_from_config(encoder_config)
 
     def encode(self, x):
         # print("----------Input: ------------", x.shape)
-        h = self.encoder(x, latent_tokens=self.latent_tokens)
+        h = self.encoder(x)
         if self.encoder_normalize_embedding:
             h = F.normalize(h, p=2, dim=1)
         quant, emb_loss, info = self.quantize(h)
@@ -385,4 +385,3 @@ class VQModelDino(VQModel):
         log["inputs"] = x
         log["reconstructions"] = xrec
         return log
-

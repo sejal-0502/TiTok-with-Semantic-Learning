@@ -826,21 +826,21 @@ class Decoder(nn.Module):
 
     """Additonal changes for titok - for additing masked tokens"""
     def forward(self, z):
-        print("Decoder I/p: ", z.shape)
+        # print("Decoder I/p: ", z.shape)
         N, C, H, W = z.shape # [4, 50, 1, 128]
 
         assert H == 1 and W == self.num_latent_tokens, f"{H}, {W}, {self.num_latent_tokens}"
         z = z.reshape(N, C*H, W).permute(0, 2, 1)  # [4, 128, 50]
-        print("Z1 : ",z.shape)
+        # print("Z1 : ",z.shape)
         
         z = self.decoder_embed(z) # [4, 128, 512]
 
-        print("Z2 : ",z.shape)
+        # print("Z2 : ",z.shape)
         
         self.last_z_shape = z.shape # [4, 128, 512]
 
         batchsize, seq_len, token_size = z.shape  # [4, 128, 512]
-        print("Z shape before adding masked tokens: ", z.shape) # [4, 128, 512] 
+        # print("Z shape before adding masked tokens: ", z.shape) # [4, 128, 512] 
 
         temb = None
 
@@ -849,31 +849,31 @@ class Decoder(nn.Module):
                                     mask_tokens], dim=1)
         mask_tokens = mask_tokens + self.positional_embedding.to(mask_tokens.dtype)
         z = z + self.latent_token_positional_embedding[:seq_len]
-        print("Positional embedding added: ", z.shape)
+        # print("Positional embedding added: ", z.shape)
  
         z = torch.cat([mask_tokens, z], dim=1) # [4, 385, 512], 385 = 128 + 256 + 1
         z = z.permute(0, 2, 1) # [4, 512, 385]
         z = z.unsqueeze(-1) # [4, 512, 385, 1]
 
-        print("h before conv: ", z.shape)
+        # print("h before conv: ", z.shape)
     
         h = self.conv_in(z)
 
-        print("h after conv : ", h.shape)
+        # print("h after conv : ", h.shape)
         h = z
-        print("h before mid block: ", h.shape) # [4, 512, 385, 1]
+        # print("h before mid block: ", h.shape) # [4, 512, 385, 1]
 
         h = self.mid.block_1(h, temb)
-        print("h after 1st block_1: ", h.shape)
+        # print("h after 1st block_1: ", h.shape)
         h = self.mid.attn_1(h)
         h = self.mid.block_2(h, temb)
 
-        print("h after middle conv: ", h.shape) # [4, 512, 385, 1]
+        # print("h after middle conv: ", h.shape) # [4, 512, 385, 1]
         batchsize, tokens, lent, _ = z.shape
         h = h.reshape(batchsize, tokens, lent*_).permute(0, 2, 1) # [4, 512, 385] --> [4, 385, 512]
         h = h[:, 1:1+self.grid_size**2] # [4, 256, 385]
 
-        print("h after removing unnecessary content : ", h.shape)
+        # print("h after removing unnecessary content : ", h.shape)
 
         h = h.permute(0, 2, 1).reshape(batchsize, self.model_width, self.grid_size, self.grid_size) # [4, 512, 256] --> [4, 512, 16, 16]
 
@@ -886,7 +886,7 @@ class Decoder(nn.Module):
             if i_level != 0:
                 h = self.up[i_level].upsample(h)
 
-        print("h after upsampling : ", h.shape) # (4, 128, 256, 256)
+        # print("h after upsampling : ", h.shape) # (4, 128, 256, 256)
 
         # end
         if self.give_pre_end:
@@ -896,7 +896,7 @@ class Decoder(nn.Module):
         h = nonlinearity(h)
         h = self.conv_out(h)
 
-        print("After decoding : ", h.shape) # (4, 3, 256, 256)
+        # print("After decoding : ", h.shape) # (4, 3, 256, 256)
         return h
     
 class VUNet(nn.Module):
@@ -1135,4 +1135,3 @@ class UpsampleDecoder(nn.Module):
         h = nonlinearity(h)
         h = self.conv_out(h)
         return h
-
