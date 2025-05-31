@@ -9,16 +9,14 @@ model:
       params:
         image_size: 256
         patch_size: 16
-        z_channels: 512
-        model_width: 512
-        depth : 8
-        heads : 8
+        z_channels: 768
+        model_width: 768
+        depth : 12
+        heads : 12
         token_size: 16
-        # token_size: 64
         num_latent_tokens: 128
-        # num_latent_tokens: 256
         mlp_dim : 3072
-        # mlp_dim : 2048
+        pretrained : True
         normalize_embedding: True
     decoder_config:
       target: taming.modules.diffusionmodules.model.Decoder
@@ -28,14 +26,11 @@ model:
         resolution: 256
         model_width: 512
         token_size: 16
-        # token_size: 64
         num_latent_tokens: 128
-        # num_latent_tokens: 256
         in_channels: 3
         out_ch: 3
         ch: 128
         ch_mult: [ 1,1,2,2,4] 
-        # ch_mult: [ 1,1,2,4,6]  
         num_res_blocks: 2
         attn_resolutions: [16]
         dropout: 0.0
@@ -45,7 +40,6 @@ model:
       params:
         n_e: 4096
         e_dim: 16
-        # e_dim: 64
         beta: 0.25
         normalize_embedding: True
     loss_config:
@@ -54,7 +48,6 @@ model:
         disc_conditional: False
         disc_in_channels: 3
         disc_start: 10000
-        # disc_start: 5000
         disc_weight: 0.1
         adaptive_disc_weight: True
         codebook_weight: 1.0
@@ -63,35 +56,31 @@ model:
         l1_loss_weight: 1.0
         l2_loss_weight: 0.0
         warmup_steps: 5000 
-        # warmup_steps: 500
         min_lr_multiplier: 0.1 
-        # min_lr_multiplier: 1 
         beta_1: 0.5
         beta_2: 0.9
     entropy_loss_weight_scheduler_config:
       target: taming.lr_scheduler.VQEntropyLossScheduler
       params:
         decay_steps: 10000
-        # weight_max: 0.01 # 0.05 
         weight_max: 0.1 
-        # weight_min: 0.001 # 0.01 - for TSNE
-        weight_min: 0.01 
+        weight_min: 0.001 
 
 data:
   target: main.DataModuleFromConfig
   params:
     batch_size: 4
-    # batch_size: 2
     num_workers: 16
     train:
       target: taming.data.custom.CustomTrain
       params:
-        # training_images_list_file: /work/dlcsmall2/mittal-bdd-data/BDD100K/images/train_daytime_clear.txt
-        training_images_list_file: /work/dlclarge2/mutakeks-storage_titok/data/train_half.txt
+        training_images_list_file: /work/dlcsmall1/mittal-token-data/BDD100K/images/train_daytime_clear.txt
+         
+        # training_images_list_file: /work/dlclarge2/mutakeks-storage_titok/data/train_half.txt
         size: 256
     validation:
       target: taming.data.custom.CustomTest
       params:
-        # test_images_list_file: /work/dlcsmall2/mittal-bdd-data/BDD100K/images/val_daytime_clear.txt
-        test_images_list_file: /work/dlclarge2/mutakeks-storage_titok/data/val_half.txt
+        test_images_list_file: /work/dlcsmall1/mittal-token-data/BDD100K/images/val_daytime_clear.txt
+        # test_images_list_file: /work/dlclarge2/mutakeks-storage_titok/data/val_half.txt
         size: 256

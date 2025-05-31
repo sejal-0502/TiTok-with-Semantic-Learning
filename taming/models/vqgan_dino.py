@@ -14,6 +14,7 @@ from taming.modules.vqvae.quantize import EMAVectorQuantizer
 from taming.models.vqgan import VQModel, VQModel2
 from taming.models.vqgan_with_entropy_loss import VQModel2WithEntropyLoss
 from taming.modules.vqvae.quantize_with_entropy_loss import VectorQuantizer2WithEntropyLoss
+from timm.models.vision_transformer import VisionTransformer
 
 import timm
 from einops import rearrange
@@ -182,6 +183,39 @@ class VQModel2WithEntropyDINOLoss(VQModel2WithEntropyLoss):
         self.log_dict(log_dict_disc)
         return self.log_dict
 
+class VisionTransformerWithPretrainedWts(VisionTransformer):
+    def __init__(self, img_size, num_extra_tokens,  **kwargs):
+        """
+        pretrained_cfg: pass the same kwargs you’d pass to timm.create_model
+        num_extra_tokens: how many extra tokens to prepend
+        """
+        super().__init__(img_size=img_size,**kwargs)
+        self.num_extra_tokens = num_extra_tokens
+        if num_extra_tokens > 0:
+            # 1) create the extra tokens
+            self.prompt_tokens = nn.Parameter(torch.zeros(1, num_extra_tokens, self.embed_dim))
+            # 2) replace the pos_embed with a larger one
+            num_patches = self.patch_embed.num_patches
+            new_len = 1 + num_extra_tokens + num_patches
+            self.pos_embed = nn.Parameter(torch.zeros(1, new_len, self.embed_dim))
+
+    def forward_features(self, x):
+        B = x.size(0)
+        x = self.patch_embed(x)                    # (B, N, D)
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # (B,1,D)
+        if self.num_extra_tokens > 0:
+            prompt_tokens = self.prompt_tokens.expand(B, -1, -1)  # (B,K,D)
+            # x = torch.cat((cls_tokens, prompt_tokens, x), dim=1)
+            x = torch.cat((cls_tokens, x, prompt_tokens), dim=1)
+        else:
+            x = torch.cat((cls_tokens, x), dim=1)
+        x = x + self.pos_embed
+        x = self.pos_drop(x)
+        for blk in self.blocks:
+            x = blk(x)
+        x = self.norm(x)
+        return x
+
 """Used class - Changes in the class for removing the pretrained wts"""
 class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
     def __init__(self, 
@@ -209,16 +243,51 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
         self.num_latent_tokens = encoder_config.params['num_latent_tokens']
         self.encoder.width = encoder_config.params['model_width']
         self.width = encoder_config.params['model_width']
+        self.pretrained = encoder_config.params['pretrained']
         self.scale = scale = self.width ** -0.5
+        self.grid_size = 16
+        self.pretrained_wt = 768
+        self.token_size = encoder_config.params['token_size']
+        self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width)) 
+        self.ln = nn.Linear(self.pretrained_wt, self.token_size)
         # self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
 
-        self.encoder = instantiate_from_config(encoder_config)
+        if self.pretrained == True:
+            pretrained_model = timm.create_model("vit_base_patch16_224.mae", img_size=self.image_size, pretrained=True)
+            state_dict = pretrained_model.state_dict()
+
+            #Create your model instance (with any architectural tweaks already applied)
+            self.encoder = VisionTransformerWithPretrainedWts(img_size=self.image_size, num_extra_tokens=self.num_latent_tokens)
+            K = self.encoder.num_extra_tokens
+            state_dict['pos_embed'] = nn.Parameter(torch.zeros(1, 1+K+(state_dict['pos_embed'].shape[1]-1), 768))  # (1, 1+K+N, D)
+
+            # 3. Load weights, ignoring any missing or unexpected keys
+            missing, unexpected = self.encoder.load_state_dict(state_dict, strict=False)
+            for name, param in self.encoder.named_parameters():
+                print(f"{name}: {param.shape}")
+
+            print(f"Loaded with {len(missing)} missing keys and {len(unexpected)} unexpected keys")
+
+            print("Missing keys:")
+            print(missing)
+        else :
+            print("Not using pretrained wts")
+            self.encoder = instantiate_from_config(encoder_config)
 
     def encode(self, x):
-        # print("----------Input: ------------", x.shape)
-        h = self.encoder(x)
-        if self.encoder_normalize_embedding:
-            h = F.normalize(h, p=2, dim=1)
+        if self.pretrained == True :
+            h = self.encoder.forward_features(x)
+            h = h.unsqueeze(2)
+            h = h[:, 1+self.grid_size**2:, :] 
+            h = self.ln(h)
+            h = h.permute(0, 3, 2, 1)
+            if self.encoder_normalize_embedding:
+                h = F.normalize(h, p=2, dim=1)
+        else :
+            h = self.encoder(x)
+            if self.encoder_normalize_embedding:
+                h = F.normalize(h, p=2, dim=1)
+
         quant, emb_loss, info = self.quantize(h)
         return quant, emb_loss, info
 

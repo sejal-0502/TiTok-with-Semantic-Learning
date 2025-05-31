@@ -856,11 +856,12 @@ class Decoder(nn.Module):
         z = z.unsqueeze(-1) # [4, 512, 385, 1]
 
         # print("h before conv: ", z.shape)
-    
+        # print("I think probelm start from here")
         h = self.conv_in(z)
 
+        # print("Not here")
         # print("h after conv : ", h.shape)
-        h = z
+        # h = z
         # print("h before mid block: ", h.shape) # [4, 512, 385, 1]
 
         h = self.mid.block_1(h, temb)
@@ -869,13 +870,14 @@ class Decoder(nn.Module):
         h = self.mid.block_2(h, temb)
 
         # print("h after middle conv: ", h.shape) # [4, 512, 385, 1]
-        batchsize, tokens, lent, _ = z.shape
+        # batchsize, tokens, lent, _ = z.shape
+        batchsize, tokens, lent, _ = h.shape
         h = h.reshape(batchsize, tokens, lent*_).permute(0, 2, 1) # [4, 512, 385] --> [4, 385, 512]
         h = h[:, 1:1+self.grid_size**2] # [4, 256, 385]
 
         # print("h after removing unnecessary content : ", h.shape)
-
-        h = h.permute(0, 2, 1).reshape(batchsize, self.model_width, self.grid_size, self.grid_size) # [4, 512, 256] --> [4, 512, 16, 16]
+        h = h.permute(0, 2, 1).reshape(batchsize, tokens, self.grid_size, self.grid_size) # [4, 512, 256] --> [4, 512, 16, 16]
+        # h = h.permute(0, 2, 1).reshape(batchsize, self.model_width, self.grid_size, self.grid_size) # [4, 512, 256] --> [4, 512, 16, 16]
 
         # upsampling
         for i_level in reversed(range(self.num_resolutions)): 

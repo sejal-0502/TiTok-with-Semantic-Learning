@@ -77,7 +77,7 @@ def get_parser(**parser_kwargs):
         "--resume",
         type=str,
         const=True,
-        default="/work/dlclarge2/mutakeks-storage_titok/big_data/checkpoints/last.ckpt",
+        default="/work/dlclarge2/mutakeks-storage_titok/titok_p_4/checkpoints/last.ckpt",
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )

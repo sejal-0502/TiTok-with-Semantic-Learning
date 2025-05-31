@@ -12,11 +12,11 @@
 
 
 # Execute your program
-# srun python -m torch.distributed.launch --nproc_per_node=2 \
-#     titok_project/token_compression/main.py \
-#     --base titok_project/token_compression/configs/vqgan_baseline.yaml \
-#     -t True --n_gpus 2 --n_nodes 1 --name arch_100_10 \
-#     --checkpoint_dir /work/dlclarge2/mutakeks-storage_titok/arch_100_10
+srun python -m torch.distributed.launch --nproc_per_node=2 \
+    titok_project/token_compression/main.py \
+    --base titok_project/token_compression/configs/vqgan_baseline.yaml \
+    -t True --n_gpus 2 --n_nodes 1 --name titok_2 \
+    --checkpoint_dir /work/dlclarge2/mutakeks-storage_titok/titok_2
 
 # Resume training 
 # srun python -m torch.distributed.launch --nproc_per_node=2 \
