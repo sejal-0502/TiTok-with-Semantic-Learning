@@ -189,7 +189,7 @@ class VisionTransformerWithPretrainedWts(VisionTransformer):
         pretrained_cfg: pass the same kwargs you’d pass to timm.create_model
         num_extra_tokens: how many extra tokens to prepend
         """
-        super().__init__(img_size=img_size,**kwargs)
+        super().__init__(img_size=img_size, **kwargs)
         self.num_extra_tokens = num_extra_tokens
         if num_extra_tokens > 0:
             # 1) create the extra tokens
@@ -219,6 +219,7 @@ class VisionTransformerWithPretrainedWts(VisionTransformer):
 """Used class - Changes in the class for removing the pretrained wts"""
 class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
     def __init__(self, 
+                 pretrained_model_name,
                  encoder_config,
                  decoder_config,
                  quantizer_config,
@@ -252,24 +253,64 @@ class VQModel2WithEntropyDINOLossMAEinit(VQModel2WithEntropyDINOLoss):
         self.ln = nn.Linear(self.pretrained_wt, self.token_size)
         # self.latent_tokens = nn.Parameter(self.scale * torch.randn(self.num_latent_tokens, self.encoder.width))
 
+        if pretrained_model_name:
+            if pretrained_model_name == 'MAE' :
+                pretrained_encoder_model = 'vit_base_patch16_224.mae'
+            elif pretrained_model_name == 'DINO_TITOK' :
+                pretrained_encoder_model = 'timm/vit_base_patch16_224.dino'
+            elif pretrained_model_name == 'CLIP' :
+                pretrained_encoder_model = 'timm/vit_base_patch16_clip_224.dfn2b'
+            elif pretrained_model_name == 'DEPTH_ANYTHING_V2' :
+                pretrained_encoder_model = '/work/dlclarge2/mutakeks-storage_titok/data/depth_anything/depth_anything_v2_vitb.pth?download=true'
+
+
         if self.pretrained == True:
-            pretrained_model = timm.create_model("vit_base_patch16_224.mae", img_size=self.image_size, pretrained=True)
-            state_dict = pretrained_model.state_dict()
+            if pretrained_model_name != 'DEPTH_ANYTHING_V2':
+                pretrained_model = timm.create_model(pretrained_encoder_model, img_size=self.image_size, pretrained=True)
+                state_dict = pretrained_model.state_dict()
 
-            #Create your model instance (with any architectural tweaks already applied)
-            self.encoder = VisionTransformerWithPretrainedWts(img_size=self.image_size, num_extra_tokens=self.num_latent_tokens)
-            K = self.encoder.num_extra_tokens
-            state_dict['pos_embed'] = nn.Parameter(torch.zeros(1, 1+K+(state_dict['pos_embed'].shape[1]-1), 768))  # (1, 1+K+N, D)
+                #Create your model instance (with any architectural tweaks already applied)
+                self.encoder = VisionTransformerWithPretrainedWts(img_size=self.image_size, num_extra_tokens=self.num_latent_tokens)
+                K = self.encoder.num_extra_tokens
+                state_dict['pos_embed'] = nn.Parameter(torch.zeros(1, 1+K+(state_dict['pos_embed'].shape[1]-1), 768))  # (1, 1+K+N, D)
 
-            # 3. Load weights, ignoring any missing or unexpected keys
-            missing, unexpected = self.encoder.load_state_dict(state_dict, strict=False)
-            for name, param in self.encoder.named_parameters():
-                print(f"{name}: {param.shape}")
+                if pretrained_model_name == 'CLIP':
+                    state_dict.pop("head.weight", None)
+                    state_dict.pop("head.bias", None)
+                # 3. Load weights, ignoring any missing or unexpected keys
+                missing, unexpected = self.encoder.load_state_dict(state_dict, strict=False)
+                for name, param in self.encoder.named_parameters():
+                    print(f"{name}: {param.shape}")
 
-            print(f"Loaded with {len(missing)} missing keys and {len(unexpected)} unexpected keys")
+                print(f"Loaded with {len(missing)} missing keys and {len(unexpected)} unexpected keys")
+                print("Missing keys:")
+                print(missing)
+            else :
+                pretrained_model = torch.load(pretrained_encoder_model, map_location='cuda')
+                if 'state_dict' in pretrained_model:
+                    state_dict = pretrained_model['state_dict']
+                else:
+                    state_dict = pretrained_model
 
-            print("Missing keys:")
-            print(missing)
+                new_state_dict = {}
+                for k, v in state_dict.items():
+                    new_key = k.replace("pretrained.", "")  # remove 'module.' if present
+                    new_state_dict[new_key] = v
+                state_dict = new_state_dict
+
+                #Create your model instance (with any architectural tweaks already applied)
+                self.encoder = VisionTransformerWithPretrainedWts(img_size=self.image_size, num_extra_tokens=self.num_latent_tokens)
+                K = self.encoder.num_extra_tokens
+                state_dict['pos_embed'] = nn.Parameter(torch.zeros(1, 1+K+(state_dict['pos_embed'].shape[1]-1), 768))  # (1, 1+K+N, D)
+
+                # 3. Load weights, ignoring any missing or unexpected keys
+                missing, unexpected = self.encoder.load_state_dict(state_dict, strict=False)
+                for name, param in self.encoder.named_parameters():
+                    print(f"{name}: {param.shape}")
+
+                print(f"Loaded with {len(missing)} missing keys and {len(unexpected)} unexpected keys")
+                print("Missing keys:")
+                print(missing)
         else :
             print("Not using pretrained wts")
             self.encoder = instantiate_from_config(encoder_config)

@@ -4,6 +4,7 @@ model:
   params:
     monitor: 'val/rec_loss'
     grad_acc_steps: 16
+    pretrained_model_name : 'MAE'
     encoder_config:
       target: taming.modules.diffusionmodules.model_vit.EncoderVIT
       params:
@@ -14,7 +15,7 @@ model:
         depth : 12
         heads : 12
         token_size: 16
-        num_latent_tokens: 128
+        num_latent_tokens: 16
         mlp_dim : 3072
         pretrained : True
         normalize_embedding: True
@@ -22,11 +23,11 @@ model:
       target: taming.modules.diffusionmodules.model.Decoder
       params:
         double_z: False
-        z_channels: 512
+        z_channels: 768
         resolution: 256
-        model_width: 512
+        model_width: 768
         token_size: 16
-        num_latent_tokens: 128
+        num_latent_tokens: 16
         in_channels: 3
         out_ch: 3
         ch: 128
@@ -75,7 +76,6 @@ data:
       target: taming.data.custom.CustomTrain
       params:
         training_images_list_file: /work/dlcsmall1/mittal-token-data/BDD100K/images/train_daytime_clear.txt
-         
         # training_images_list_file: /work/dlclarge2/mutakeks-storage_titok/data/train_half.txt
         size: 256
     validation:

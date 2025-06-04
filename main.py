@@ -77,7 +77,7 @@ def get_parser(**parser_kwargs):
         "--resume",
         type=str,
         const=True,
-        default="/work/dlclarge2/mutakeks-storage_titok/titok_p_4/checkpoints/last.ckpt",
+        default="",
         nargs="?",
         help="resume from logdir or checkpoint in logdir",
     )
@@ -176,7 +176,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument(
         "--logdir",
         type=str,
-        default="",  # default value
+        default="/work/dlclarge2/mutakeks-storage_titok/mae_16",  # default value
         help="Directory to save vqgan logs"
     )
 
